@@ -1,0 +1,13 @@
+﻿node_modules/
+.env
+.env.*
+!.env.example
+.DS_Store
+uploads/
+*.log
+.vscode/
+dist/
+build/
+.cache/
+*.key
+*.pem
