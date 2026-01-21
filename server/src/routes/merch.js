@@ -103,6 +103,10 @@ router.post('/products', upload.array('images', 10), async (req, res) => {
       ? req.files.map(file => `/uploads/${file.filename}`)
       : [];
     
+    // Fix: sizes und stock immer als JSON speichern
+    const safeSizes = JSON.stringify(typeof sizes === 'string' ? JSON.parse(sizes) : sizes || []);
+    const safeStock = JSON.stringify(typeof stock === 'string' ? JSON.parse(stock) : stock || {});
+    
     const pool = getDatabase();
     const [result] = await pool.query(
       `INSERT INTO merch_products (name, description, price, category, images, sizes, stock, isActive) 
@@ -113,8 +117,8 @@ router.post('/products', upload.array('images', 10), async (req, res) => {
         parseFloat(price),
         category,
         JSON.stringify(images),
-        sizes || JSON.stringify([]),
-        stock || JSON.stringify({})
+        safeSizes,
+        safeStock
       ]
     );
     
