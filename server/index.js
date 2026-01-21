@@ -32,6 +32,7 @@ const allowedOrigins = [
   "https://www.virus-event.de",
   "https://virus-event.de",
   "http://localhost:5173",
+  "http://localhost:8080",
 ];
 
 // CORS Middleware
