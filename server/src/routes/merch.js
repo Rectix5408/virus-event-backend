@@ -154,8 +154,8 @@ router.put('/products/:id', upload.array('images', 10), async (req, res) => {
         parseFloat(price),
         category,
         JSON.stringify(images),
-        typeof sizes === 'object' ? JSON.stringify(sizes) : sizes || JSON.stringify([]),
-        typeof stock === 'object' ? JSON.stringify(stock) : stock || JSON.stringify({}),
+        JSON.stringify(typeof sizes === 'string' ? JSON.parse(sizes) : sizes || []),
+        JSON.stringify(typeof stock === 'string' ? JSON.parse(stock) : stock || {}),
         req.params.id
       ]
     );
