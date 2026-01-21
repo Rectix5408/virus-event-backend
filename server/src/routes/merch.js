@@ -51,6 +51,7 @@ router.get('/products', async (req, res) => {
     
     const productsWithParsedJSON = products.map(product => ({
       ...product,
+      price: parseFloat(product.price),
       images: JSON.parse(product.images),
       sizes: JSON.parse(product.sizes),
       stock: JSON.parse(product.stock)
@@ -77,6 +78,7 @@ router.get('/products/:id', async (req, res) => {
     
     const product = {
       ...products[0],
+      price: parseFloat(products[0].price),
       images: JSON.parse(products[0].images),
       sizes: JSON.parse(products[0].sizes),
       stock: JSON.parse(products[0].stock)
