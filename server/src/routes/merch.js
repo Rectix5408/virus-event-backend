@@ -99,7 +99,9 @@ router.post('/products', upload.array('images', 10), async (req, res) => {
       return res.status(400).json({ error: 'Name, Preis und Kategorie sind erforderlich' });
     }
     
-    const images = req.files.map(file => `/uploads/${file.filename}`);
+    const images = req.files && req.files.length > 0
+      ? req.files.map(file => `/uploads/${file.filename}`)
+      : [];
     
     const pool = getDatabase();
     const [result] = await pool.query(
