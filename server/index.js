@@ -23,6 +23,7 @@ const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
 const app = express();
+app.enable("trust proxy"); // Wichtig für HTTPS hinter Proxies/Load Balancern
 const PORT = process.env.PORT || 3001;
 
 // Erlaubte Origins
@@ -38,10 +39,13 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+    console.warn(`⚠️ CORS Blocked Origin: ${origin}`);
     return callback(new Error(`CORS: Origin ${origin} not allowed`), false);
   },
   credentials: true,
 }));
+// Pre-Flight Requests für alle Routen erlauben
+app.options('*', cors());
 
 // Body Parser
 app.use(bodyParser.json());
@@ -51,7 +55,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Health Check
-app.get("/health", async (req, res) => {
+const healthCheck = async (req, res) => {
   let dbStatus = "disconnected";
   try {
     const pool = getDatabase();
@@ -60,6 +64,14 @@ app.get("/health", async (req, res) => {
     dbStatus = "error: " + err.message;
   }
   res.json({ status: "ok", database: dbStatus, timestamp: new Date().toISOString() });
+};
+
+app.get("/health", healthCheck);
+app.get("/api/health", healthCheck);
+
+// Root Route für einfachen Erreichbarkeitstest
+app.get("/api", (req, res) => {
+  res.send("VIRUS EVENT API is running 🚀");
 });
 
 // API Routes
@@ -67,6 +79,19 @@ app.use("/api", apiRoutes);
 app.use("/api/events", eventsRouter);
 app.use("/api/auth", authRouter);
 app.use('/api/newsletter', newsletterRouter);
+
+// --- Frontend Build Integration ---
+const frontendDist = path.join(__dirname, "../../virus-event-frontend/dist");
+
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+  console.log(`📂 Serving frontend from: ${frontendDist}`);
+}
 
 // Error Handling
 app.use((err, req, res, next) => {
