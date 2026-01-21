@@ -118,6 +118,43 @@ export const createTables = async () => {
       )
     `);
 
+    // Merch Products Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS merch_products (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        price DECIMAL(10, 2) NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        images JSON NOT NULL,
+        sizes JSON NOT NULL,
+        stock JSON NOT NULL,
+        isActive BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Merch Orders Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS merch_orders (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        orderId VARCHAR(255) NOT NULL UNIQUE,
+        email VARCHAR(255) NOT NULL,
+        firstName VARCHAR(100) NOT NULL,
+        lastName VARCHAR(100) NOT NULL,
+        address JSON NOT NULL,
+        items JSON NOT NULL,
+        totalAmount DECIMAL(10, 2) NOT NULL,
+        paymentIntentId VARCHAR(255) NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_email (email),
+        INDEX idx_orderId (orderId)
+      )
+    `);
+
     // Check if events exist and seed if empty
     const [rows] = await pool.query("SELECT COUNT(*) as count FROM events");
     const count = rows[0].count;
@@ -176,6 +213,44 @@ export const createTables = async () => {
     if (adminRows[0].count == 0) {
       console.log("🌱 Seeding database with default admin...");
       await pool.query("INSERT INTO admins (username, password) VALUES (?, ?)", ['admin', 'virus-admin-123']);
+    }
+
+    // Seed Merch Products if not exists
+    const [merchRows] = await pool.query("SELECT COUNT(*) as count FROM merch_products");
+    if (merchRows[0].count == 0) {
+      console.log("🌱 Seeding database with test merch products...");
+      
+      const testProducts = [
+        {
+          name: "VIRUS T-SHIRT BLACK",
+          description: "Premium T-Shirt aus 100% Baumwolle mit VIRUS Logo Front und Back Print. Perfekt für jede Rave!",
+          price: 39.99,
+          category: "tshirts",
+          images: JSON.stringify(["/uploads/tshirt-front.png", "/uploads/tshirt-back.png"]),
+          sizes: JSON.stringify(["S", "M", "L", "XL", "XXL"]),
+          stock: JSON.stringify({ "S": 10, "M": 15, "L": 20, "XL": 15, "XXL": 10 }),
+          isActive: true
+        },
+        {
+          name: "VIRUS HOODIE BLACK",
+          description: "Kuschelig warmer Premium Hoodie mit VIRUS Logo Front und Back Print. Ideal für kalte Nächte!",
+          price: 69.99,
+          category: "hoodies",
+          images: JSON.stringify(["/uploads/hoodie-front.png", "/uploads/hoodie-back.png"]),
+          sizes: JSON.stringify(["S", "M", "L", "XL", "XXL"]),
+          stock: JSON.stringify({ "S": 5, "M": 10, "L": 15, "XL": 10, "XXL": 5 }),
+          isActive: true
+        }
+      ];
+
+      for (const product of testProducts) {
+        await pool.query(
+          `INSERT INTO merch_products (name, description, price, category, images, sizes, stock, isActive) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [product.name, product.description, product.price, product.category, product.images, product.sizes, product.stock, product.isActive]
+        );
+      }
+      console.log("✓ Database seeded with 2 test merch products");
     }
 
     console.log('✓ Tables created/verified');

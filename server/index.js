@@ -9,6 +9,7 @@ import apiRoutes from "./src/routes/api.js";
 import eventsRouter from "./src/routes/events.js";
 import authRouter from "./src/routes/auth.js";
 import newsletterRouter from './src/routes/newsletter.js';
+import merchRouter from './src/routes/merch.js';
 import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
 
@@ -47,6 +48,10 @@ app.use(cors({
 // Pre-Flight Requests für alle Routen erlauben
 app.options('*', cors());
 
+// Webhook routes BEFORE body parser (need raw body)
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
+app.use('/api/merch/webhook', express.raw({ type: 'application/json' }));
+
 // Body Parser
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -74,11 +79,18 @@ app.get("/api", (req, res) => {
   res.send("VIRUS EVENT API is running 🚀");
 });
 
+// Cache-Control für API-Routen (Verhindert Caching alter URLs)
+app.use("/api", (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  next();
+});
+
 // API Routes
 app.use("/api", apiRoutes);
 app.use("/api/events", eventsRouter);
 app.use("/api/auth", authRouter);
 app.use('/api/newsletter', newsletterRouter);
+app.use('/api/merch', merchRouter);
 
 // --- Frontend Build Integration ---
 const frontendDist = path.join(__dirname, "../../virus-event-frontend/dist");

@@ -80,20 +80,14 @@ export const createCheckoutSession = async (payload) => {
       cancel_url: cancelUrl,
       customer_email: email,
       metadata: {
-        ticketId, // Pass ticketId to webhook
+        ticketId,
         eventId,
         tierId,
-        quantity
+        quantity: quantity.toString()
       },
-      // expire in 1 hour
       expires_at: Math.floor(Date.now() / 1000) + 3600,
     });
     
-    // Update ticket with paymentIntentId
-    const paymentIntentId = session.payment_intent;
-    const updateQuery = "UPDATE tickets SET paymentIntentId = ? WHERE id = ?";
-    await connection.execute(updateQuery, [paymentIntentId, ticketId]);
-
     await connection.commit();
 
     return {
@@ -155,7 +149,6 @@ const handlePaymentSucceeded = async (session) => {
       return;
     }
 
-    // Generate QR code
     const qrCodeData = generateTicketQRData(ticket.id, ticket.email, ticket.eventId);
     const qrCodeImage = await QRCode.toDataURL(qrCodeData, {
       errorCorrectionLevel: "H",
@@ -165,13 +158,14 @@ const handlePaymentSucceeded = async (session) => {
       width: 300,
     });
 
-    // Update ticket
     const db = getDatabase();
     const connection = await db.getConnection();
-    await connection.execute("UPDATE tickets SET status = ?, qrCode = ? WHERE id = ?", ['confirmed', qrCodeImage, ticketId]);
+    await connection.execute(
+      "UPDATE tickets SET status = ?, qrCode = ?, paymentIntentId = ? WHERE id = ?", 
+      ['confirmed', qrCodeImage, session.payment_intent, ticketId]
+    );
     connection.release();
     
-    // Fetch event details for email
     const event = await getEventById(ticket.eventId);
     let eventDetails;
     if (!event) {
@@ -181,7 +175,6 @@ const handlePaymentSucceeded = async (session) => {
         eventDetails = { name: event.title, date: event.date, time: event.time, location: event.location };
     }
 
-    // Send confirmation email
     const confirmedTicket = await getTicketById(ticketId);
     await sendTicketEmail(confirmedTicket, eventDetails);
 
