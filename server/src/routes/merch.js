@@ -187,17 +187,17 @@ router.delete('/products/:id', async (req, res) => {
   }
 });
 
-router.post('/upload', upload.array('images', 10), async (req, res) => {
+router.post('/upload', upload.single('image'), async (req, res) => {
   try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'Keine Bilder hochgeladen' });
+    if (!req.file) {
+      return res.status(400).json({ error: 'Kein Bild hochgeladen' });
     }
     
-    const imagePaths = req.files.map(file => `/uploads/${file.filename}`);
-    res.json({ images: imagePaths });
+    const imageUrl = `/uploads/${req.file.filename}`;
+    res.json({ url: imageUrl });
   } catch (error) {
-    console.error('Error uploading images:', error);
-    res.status(500).json({ error: 'Fehler beim Hochladen der Bilder' });
+    console.error('Error uploading image:', error);
+    res.status(500).json({ error: 'Fehler beim Hochladen des Bildes' });
   }
 });
 

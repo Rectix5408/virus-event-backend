@@ -115,13 +115,16 @@ export const countTicketsByTier = async (eventId, tierId, status = ['confirmed',
   const connection = dbConnection || (await db.getConnection());
 
   try {
+    const placeholders = status.map(() => '?').join(',');
     const query = `
       SELECT SUM(quantity) as count 
       FROM tickets 
-      WHERE eventId = ? AND tierId = ? AND status IN (?)
+      WHERE eventId = ? AND tierId = ? AND status IN (${placeholders})
     `;
 
-    const [rows] = await connection.execute(query, [eventId, tierId, status]);
+    const params = [eventId, tierId, ...status];
+
+    const [rows] = await connection.execute(query, params);
 
     if (!dbConnection) {
       connection.release();
