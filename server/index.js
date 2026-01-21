@@ -54,8 +54,8 @@ app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
 app.use('/api/merch/webhook', express.raw({ type: 'application/json' }));
 
 // Body Parser
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Uploads öffentlich
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
