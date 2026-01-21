@@ -56,7 +56,7 @@ export const createCheckoutSession = async (payload) => {
       eventId,
       quantity,
       qrCode: "", // Will be generated after payment
-      paymentIntentId: null, // Will be set after payment
+      paymentIntentId: "", // Fix: set to empty string instead of null
       status: "pending",
     };
 

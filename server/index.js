@@ -31,6 +31,7 @@ const PORT = process.env.PORT || 3001;
 const allowedOrigins = [
   "https://www.virus-event.de",
   "https://virus-event.de",
+  "http://localhost:5173", 
 ];
 
 // CORS Middleware
