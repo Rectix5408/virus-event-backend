@@ -10,6 +10,7 @@ import eventsRouter from "./src/routes/events.js";
 import authRouter from "./src/routes/auth.js";
 import newsletterRouter from './src/routes/newsletter.js';
 import merchRouter from './src/routes/merch.js';
+import uploadRouter from './src/routes/upload.js';
 import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
 
