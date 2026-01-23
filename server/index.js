@@ -1,6 +1,6 @@
+import "dotenv/config"; // <--- MUSS GANZ OBEN STEHEN
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -15,8 +15,6 @@ import paymentRoutes from './src/routes/payment.js';
 import webhookRouter from './src/routes/webhook.js';
 import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
-
-dotenv.config();
 
 // Pfad Setup
 const __filename = fileURLToPath(import.meta.url);
