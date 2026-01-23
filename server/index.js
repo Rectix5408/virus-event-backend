@@ -94,8 +94,8 @@ app.use("/api/events", eventsRouter);
 app.use("/api/auth", authRouter);
 app.use('/api/newsletter', newsletterRouter);
 app.use('/api/merch', merchRouter);
-app.use('/payment', paymentRoutes);
-app.use('/api/webhooks', webhookRouter);
+app.use('/api/upload', uploadRouter);
+app.use('/api/webhooks/stripe', webhookRouter);
 
 // --- Frontend Build Integration ---
 const frontendDist = path.join(__dirname, "../../virus-event-frontend/dist");

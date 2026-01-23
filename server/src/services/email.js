@@ -42,22 +42,41 @@ export const sendTicketEmail = async (ticket, event) => {
     to: ticket.email,
     subject: `Dein Ticket für ${event.name}`,
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #333;">Deine Bestellung ist bestätigt!</h1>
-        <p>Hallo ${ticket.firstName},</p>
-        <p>Vielen Dank für deine Bestellung. Hier ist dein Ticket für <strong>${event.name}</strong>.</p>
+      <div style="font-family: 'Arial', sans-serif; max-width: 600px; margin: 0 auto; background-color: #121212; color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
         
-        <div style="background: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
-          <p><strong>Ticket ID:</strong> ${ticket.id}</p>
-          <p><strong>Kategorie:</strong> ${ticket.tierName}</p>
-          <p><strong>Anzahl:</strong> ${ticket.quantity}</p>
+        <!-- Header -->
+        <div style="background-color: #ff003c; padding: 30px; text-align: center;">
+          <h1 style="margin: 0; font-size: 28px; letter-spacing: 2px;">VIRUS EVENT</h1>
+        </div>
+        
+        <!-- Greeting -->
+        <div style="padding: 30px;">
+          <p style="font-size: 16px;">Hallo <strong>${ticket.firstName}</strong>,</p>
+          <p style="font-size: 16px; line-height: 1.6;">
+            Vielen Dank für deine Bestellung! Hier ist dein Ticket für <strong>${event.name}</strong>.
+          </p>
+
+          <!-- Ticket Details -->
+          <div style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Ticket ID:</strong> ${ticket.id}</p>
+            <p style="margin: 5px 0;"><strong>Kategorie:</strong> ${ticket.tierName}</p>
+            <p style="margin: 5px 0;"><strong>Anzahl:</strong> ${ticket.quantity}</p>
+          </div>
+
+          <!-- QR Code -->
+          <div style="text-align: center; margin: 30px 0;">
+            <img src="${ticket.qrCode}" alt="Ticket QR Code" style="width: 200px; height: 200px; border-radius: 10px;" />
+          </div>
+
+          <!-- Footer -->
+          <p style="font-size: 16px; text-align: center; margin-top: 40px;">
+            Wir freuen uns auf dich!<br/>
+            Dein <strong>VIRUS EVENT</strong> Team
+          </p>
         </div>
 
-        <div style="text-align: center; margin: 30px 0;">
-          <img src="${ticket.qrCode}" alt="Ticket QR Code" style="width: 200px; height: 200px;" />
-        </div>
-
-        <p>Dein VIRUS EVENT Team</p>
+        <!-- Bottom Bar -->
+        <div style="background-color: #ff003c; height: 5px;"></div>
       </div>
     `
   };
@@ -65,6 +84,7 @@ export const sendTicketEmail = async (ticket, event) => {
   await transporter.sendMail(mailOptions);
   console.log(`✓ Email sent to ${ticket.email}`);
 };
+
 
 export const sendBulkEmail = async (recipients, subject, htmlContent) => {
   console.log(`Starting bulk email to ${recipients.length} recipients`);

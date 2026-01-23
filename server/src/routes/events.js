@@ -1,31 +1,9 @@
 import express from 'express';
 import { getDatabase } from '../config/database.js';
-import multer from 'multer';
-import path from 'path';
 import { protect } from './auth.js';
 import { getEventStats } from '../services/ticket.js';
 
 const router = express.Router();
-
-// Konfiguration für Bildupload
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/')
-  },
-  filename: function (req, file, cb) {
-    // Einzigartiger Dateiname: event-TIMESTAMP.jpg
-    cb(null, 'event-' + Date.now() + path.extname(file.originalname))
-  }
-});
-const upload = multer({ storage: storage });
-
-// POST: Bild hochladen
-router.post('/upload', protect, upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
-  
-  const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-  res.json({ url: imageUrl });
-});
 
 // GET: Metadaten für Smart-Caching (Check auf neue Einträge)
 router.get('/meta', async (req, res) => {

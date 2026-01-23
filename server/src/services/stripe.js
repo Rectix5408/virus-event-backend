@@ -38,11 +38,11 @@ export const createCheckoutSession = async (payload) => {
       throw new Error(`Ungültige Ticketart: ${tierId}`);
     }
 
-    // Verfügbarkeit prüfen (availableQuantity ist der Restbestand)
-    // Fallback auf totalQuantity falls availableQuantity noch nicht existiert (Legacy Support)
-    const currentStock = selectedTier.availableQuantity !== undefined 
-      ? selectedTier.availableQuantity 
-      : selectedTier.totalQuantity;
+    // Verfügbarkeit prüfen (amountTickets ist der einzige Bestandswert)
+    // Fallback auf alte Felder für Migration
+    const currentStock = selectedTier.amountTickets !== undefined 
+      ? selectedTier.amountTickets 
+      : (selectedTier.availableQuantity !== undefined ? selectedTier.availableQuantity : selectedTier.totalQuantity);
 
     if (quantity > currentStock) {
       throw new Error(`Nicht genügend Tickets verfügbar. Nur noch ${currentStock} verfügbar.`);
@@ -197,14 +197,16 @@ const createTicketAfterPayment = async (session, connection) => {
     throw new Error(`Ticketart nicht gefunden: ${tierId}`);
   }
 
-  // Fallback für availableQuantity
-  if (selectedTier.availableQuantity === undefined) {
-    selectedTier.availableQuantity = selectedTier.totalQuantity;
+  // Migration: Fallback auf amountTickets
+  if (selectedTier.amountTickets === undefined) {
+    selectedTier.amountTickets = selectedTier.availableQuantity !== undefined 
+      ? selectedTier.availableQuantity 
+      : selectedTier.totalQuantity;
   }
 
   // Finale Verfügbarkeitsprüfung (Stock prüfen)
-  if (parseInt(quantity) > selectedTier.availableQuantity) {
-    throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${selectedTier.availableQuantity} verfügbar.`);
+  if (parseInt(quantity) > selectedTier.amountTickets) {
+    throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${selectedTier.amountTickets} verfügbar.`);
   }
 
   // QR-Code generieren
@@ -243,10 +245,14 @@ const createTicketAfterPayment = async (session, connection) => {
   );
 
   // Ticket abziehen (Stock reduzieren)
-  selectedTier.availableQuantity = Math.max(0, selectedTier.availableQuantity - parseInt(quantity));
+  selectedTier.amountTickets = Math.max(0, selectedTier.amountTickets - parseInt(quantity));
+
+  // Alte Felder entfernen, um Datenbank sauber zu halten
+  delete selectedTier.availableQuantity;
+  delete selectedTier.totalQuantity;
 
   // Sold Out Flag setzen wenn 0
-  if (selectedTier.availableQuantity === 0) {
+  if (selectedTier.amountTickets === 0) {
     selectedTier.isSoldOut = true;
   }
 
