@@ -180,9 +180,9 @@ export const createTables = async () => {
             { name: "INDUSTRIAL STRENGTH", time: "02:00 - 04:00", isHeadliner: true }
           ]),
           ticketTiers: JSON.stringify([
-            { id: "early-bird", name: "EARLY BIRD", price: 15.00, totalQuantity: 100, availableQuantity: 100 },
-            { id: "phase-1", name: "PHASE I", price: 19.00, totalQuantity: 100, availableQuantity: 50 },
-            { id: "vip", name: "VIP", price: 35.00, description: "Fast Lane + VIP Area", totalQuantity: 50, availableQuantity: 5 }
+            { id: "early-bird", name: "EARLY BIRD", price: 15.00, totalQuantity: 100, availableQuantity: 100, isSoldOut: false },
+            { id: "phase-1", name: "PHASE I", price: 19.00, totalQuantity: 100, availableQuantity: 50, isSoldOut: false },
+            { id: "vip", name: "VIP", price: 35.00, description: "Fast Lane + VIP Area", totalQuantity: 50, availableQuantity: 5, isSoldOut: false }
           ])
         },
         {
@@ -197,7 +197,7 @@ export const createTables = async () => {
           ticketUrl: "#",
           detailedLineup: JSON.stringify([]),
           ticketTiers: JSON.stringify([
-            { id: "regular", name: "REGULAR", price: 20.00, totalQuantity: 250, availableQuantity: 250 }
+            { id: "regular", name: "REGULAR", price: 20.00, totalQuantity: 250, availableQuantity: 250, isSoldOut: false }
           ])
         }
       ];

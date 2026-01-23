@@ -20,11 +20,9 @@ export const createCheckoutSession = async (payload) => {
   const connection = await db.getConnection();
 
   try {
-    await connection.beginTransaction();
-
-    // Event validieren
+    // Event validieren (Kein Locking nötig hier, da wir nur lesen)
     const [eventRows] = await connection.execute(
-      "SELECT * FROM events WHERE id = ? FOR UPDATE", 
+      "SELECT * FROM events WHERE id = ?", 
       [eventId]
     );
     const event = eventRows[0];
@@ -92,14 +90,11 @@ export const createCheckoutSession = async (payload) => {
       }
     });
     
-    await connection.commit();
-
     return {
       sessionId: session.id,
       url: session.url,
     };
   } catch (error) {
-    await connection.rollback();
     console.error("Checkout-Fehler:", error);
     throw error;
   } finally {
