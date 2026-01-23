@@ -215,7 +215,7 @@ const createTicketAfterPayment = async (session, connection) => {
 
   // Ticket in Datenbank speichern
   await connection.execute(
-    `INSERT INTO tickets (id, email, firstName, lastName, tierId, tierName, eventId, quantity, qrCode, paymentIntentId, status, created_at)
+    `INSERT INTO tickets (id, email, firstName, lastName, tierId, tierName, eventId, quantity, qrCode, paymentIntentId, status, createdAt)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
     [
       ticketId,
