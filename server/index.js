@@ -11,6 +11,7 @@ import authRouter from "./src/routes/auth.js";
 import newsletterRouter from './src/routes/newsletter.js';
 import merchRouter from './src/routes/merch.js';
 import uploadRouter from './src/routes/upload.js';
+import paymentRoutes from './src/routes/payment.js';
 import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
 
@@ -94,6 +95,7 @@ app.use("/api/events", eventsRouter);
 app.use("/api/auth", authRouter);
 app.use('/api/newsletter', newsletterRouter);
 app.use('/api/merch', merchRouter);
+app.use('/payment', paymentRoutes);
 
 // --- Frontend Build Integration ---
 const frontendDist = path.join(__dirname, "../../virus-event-frontend/dist");
