@@ -5,6 +5,7 @@ import { isValidEmail } from "../utils/helpers.js";
 import { updateCheckIn, getTicketById, getTicketsByEmail, getEventStats, findTicketByQRCode } from "../services/ticket.js";
 import users from "./users.js";
 import { protect } from './auth.js';
+import { getDatabase } from "../config/database.js";
 
 const router = express.Router();
 
@@ -18,6 +19,20 @@ const checkoutLimiter = rateLimit({
   message: "Too many checkout attempts from this IP, please try again after 15 minutes.",
 });
 
+/**
+ * GET /api/tickets
+ * Get all tickets (Admin only)
+ */
+router.get("/tickets", protect, async (req, res) => {
+  try {
+    const db = getDatabase();
+    const [tickets] = await db.execute("SELECT * FROM tickets ORDER BY createdAt DESC");
+    res.json(tickets);
+  } catch (error) {
+    console.error("Get all tickets error:", error);
+    res.status(500).json({ message: "Failed to fetch tickets" });
+  }
+});
 
 
 /**
@@ -156,6 +171,10 @@ router.get("/tickets/:email", async (req, res) => {
         checkIn: t.checkIn,
         checkInTime: t.checkInTime,
         createdAt: t.createdAt,
+        address: t.address,
+        zipCode: t.zipCode,
+        city: t.city,
+        mobileNumber: t.mobileNumber,
       })),
     });
   } catch (error) {
@@ -190,6 +209,10 @@ router.get("/tickets/id/:ticketId", async (req, res) => {
         checkIn: ticket.checkIn,
         checkInTime: ticket.checkInTime,
         createdAt: ticket.createdAt,
+        address: ticket.address,
+        zipCode: ticket.zipCode,
+        city: ticket.city,
+        mobileNumber: ticket.mobileNumber,
       },
     });
   } catch (error) {
