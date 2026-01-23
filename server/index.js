@@ -22,11 +22,22 @@ const __dirname = path.dirname(__filename);
 
 // Upload Ordner erstellen
 const uploadDir = path.join(__dirname, "uploads");
+const uploadSubDirs = ["events", "merch", "products", "misc"]; // Wichtige Unterordner
+
 try {
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
     console.log(`📂 Created upload directory at: ${uploadDir}`);
   }
+  
+  // Unterordner erstellen, um ENOENT Fehler beim Upload zu vermeiden
+  uploadSubDirs.forEach(dir => {
+    const subPath = path.join(uploadDir, dir);
+    if (!fs.existsSync(subPath)) {
+      fs.mkdirSync(subPath, { recursive: true });
+      console.log(`📂 Created upload subdirectory: ${subPath}`);
+    }
+  });
 } catch (err) {
   console.error(`❌ Failed to create upload directory: ${err.message}`);
 }
