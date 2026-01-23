@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { getDatabase } from "../config/database.js";
 import { sendTicketEmail } from "./email.js";
-import { generateTicketId, generateTicketQRData } from "../utils/helpers.js";
+import { generateTicketId } from "../utils/helpers.js";
 import QRCode from "qrcode";
 
 // Sicherstellen, dass der Server nicht abstürzt, wenn der Key fehlt
@@ -205,7 +205,14 @@ const createTicketAfterPayment = async (session, connection) => {
   }
 
   // QR-Code generieren
-  const qrCodeData = generateTicketQRData(ticketId, email, eventId);
+  // Inhalt des QR-Codes für den Einlass-Scanner (JSON Format)
+  const qrContent = {
+    ticketId: ticketId,
+    eventId: eventId,
+    email: email
+  };
+  const qrCodeData = JSON.stringify(qrContent);
+
   const qrCodeImage = await QRCode.toDataURL(qrCodeData, {
     errorCorrectionLevel: "H",
     type: "image/png",
