@@ -138,7 +138,7 @@ export const handleStripeWebhook = async (event) => {
 /**
  * Behandelt erfolgreiche Checkout-Sessions
  */
-export const handleCheckoutCompleted = async (session) => {
+const handleCheckoutCompleted = async (session) => {
   const { metadata } = session;
   const db = getDatabase();
   const connection = await db.getConnection();
