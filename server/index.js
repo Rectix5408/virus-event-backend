@@ -155,6 +155,41 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
+// Helper für Datenbank-Migrationen (Spalten hinzufügen falls sie fehlen)
+const runMigrations = async () => {
+  try {
+    const db = getDatabase();
+    if (!db) return;
+    const connection = await db.getConnection();
+    try {
+      console.log("🔄 Checking database schema for missing columns...");
+      
+      // Prüfen ob 'address' Spalte in 'tickets' existiert
+      const [columns] = await connection.execute("SHOW COLUMNS FROM tickets LIKE 'address'");
+      
+      if (columns.length === 0) {
+        console.log("⚠️ Missing columns detected in 'tickets'. Running migration...");
+        await connection.execute(`
+          ALTER TABLE tickets
+          ADD COLUMN address VARCHAR(255) AFTER lastName,
+          ADD COLUMN zipCode VARCHAR(20) AFTER address,
+          ADD COLUMN city VARCHAR(100) AFTER zipCode,
+          ADD COLUMN mobileNumber VARCHAR(50) AFTER city
+        `);
+        console.log("✅ Schema migration successful: Added address fields to tickets table.");
+      } else {
+        console.log("✅ Database schema is up to date.");
+      }
+    } catch (err) {
+      console.error("❌ Migration failed:", err.message);
+    } finally {
+      connection.release();
+    }
+  } catch (err) {
+    console.error("❌ Migration check failed:", err.message);
+  }
+};
+
 // Server Start
 const startServer = async () => {
   try {
@@ -171,6 +206,9 @@ const startServer = async () => {
       console.log("🔄 Creating tables...");
       // Fehler beim Tabellenerstellen abfangen, damit Server trotzdem startet
       await createTables().catch(err => console.error("⚠ Failed to create tables:", err.message));
+      
+      // Migrationen ausführen
+      await runMigrations();
     }
 
     const emailReady = await verifyEmailService().catch(() => false);
