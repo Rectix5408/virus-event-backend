@@ -65,3 +65,20 @@ export const sendTicketEmail = async (ticket, event) => {
   await transporter.sendMail(mailOptions);
   console.log(`✓ Email sent to ${ticket.email}`);
 };
+
+export const sendBulkEmail = async (recipients, subject, htmlContent) => {
+  console.log(`Starting bulk email to ${recipients.length} recipients`);
+  
+  // Sende Emails parallel (in einer echten App sollte man hier eine Queue verwenden)
+  const promises = recipients.map(recipient => {
+    const mailOptions = {
+      from: `"VIRUS EVENT" <${process.env.EMAIL_FROM}>`,
+      to: recipient.email,
+      subject: subject,
+      html: htmlContent
+    };
+    return transporter.sendMail(mailOptions).catch(err => console.error(`Failed to send to ${recipient.email}:`, err.message));
+  });
+
+  await Promise.all(promises);
+};
