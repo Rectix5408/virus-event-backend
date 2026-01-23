@@ -22,9 +22,18 @@ const __dirname = path.dirname(__filename);
 
 // Upload Ordner erstellen
 const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log(`📂 Created upload directory at: ${uploadDir}`);
+  }
+} catch (err) {
+  console.error(`❌ Failed to create upload directory: ${err.message}`);
+}
 
 const app = express();
+// Proxy-Einstellungen für Rate-Limiting und korrekte IP-Erkennung (wichtig für Nginx/Plesk)
+app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3001;
 
@@ -36,8 +45,8 @@ const allowedOrigins = [
   "http://localhost:8080",
 ];
 
-// CORS Middleware
-app.use(cors({
+// CORS Konfiguration
+const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
@@ -47,9 +56,14 @@ app.use(cors({
     return callback(new Error(`CORS: Origin ${origin} not allowed`), false);
   },
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+};
+
+// CORS Middleware
+app.use(cors(corsOptions));
 // Pre-Flight Requests für alle Routen erlauben
-app.options('*', cors());
+app.options('*', cors(corsOptions));
 
 // Webhook routes BEFORE body parser (need raw body)
 app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
@@ -95,6 +109,7 @@ app.use("/api/auth", authRouter);
 app.use('/api/newsletter', newsletterRouter);
 app.use('/api/merch', merchRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/payment', paymentRoutes);
 app.use('/api/webhooks/stripe', webhookRouter);
 
 // --- Frontend Build Integration ---
@@ -117,6 +132,19 @@ app.use((err, req, res, next) => {
     message: "Internal server error",
     error: process.env.NODE_ENV === "development" ? err.message : undefined,
   });
+});
+
+// Global Error Handlers for Debugging
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
+  console.error(err.name, err.message, err.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION! 💥 Shutting down...');
+  console.error(err);
+  process.exit(1);
 });
 
 // Server Start
