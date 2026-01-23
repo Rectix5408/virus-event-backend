@@ -1,5 +1,6 @@
 import express from 'express';
 import Stripe from 'stripe';
+import { handleCheckoutCompleted } from '../services/stripe.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -21,6 +22,16 @@ router.post('/verify-session', async (req, res) => {
     }
 
     if (session.payment_status === 'paid') {
+      // FALLBACK: Bestellung speichern, falls Webhook zu langsam war oder fehlt.
+      // Die Funktion prüft intern auf Duplikate, also ist das sicher.
+      try {
+        console.log('Manuelles Speichern via verify-session für:', session.id);
+        await handleCheckoutCompleted(session);
+      } catch (err) {
+        console.error('Fehler beim manuellen Speichern:', err);
+        // Wir machen weiter, damit der User trotzdem seine Bestätigung sieht
+      }
+
       const metadata = session.metadata || {};
 
       res.json({ 
