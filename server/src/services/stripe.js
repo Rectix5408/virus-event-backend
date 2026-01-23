@@ -40,11 +40,14 @@ export const createCheckoutSession = async (payload) => {
       throw new Error(`Ungültige Ticketart: ${tierId}`);
     }
 
-    // Verfügbarkeit prüfen (totalQuantity ist jetzt der Restbestand)
-    const availableQuantity = selectedTier.totalQuantity;
+    // Verfügbarkeit prüfen (availableQuantity ist der Restbestand)
+    // Fallback auf totalQuantity falls availableQuantity noch nicht existiert (Legacy Support)
+    const currentStock = selectedTier.availableQuantity !== undefined 
+      ? selectedTier.availableQuantity 
+      : selectedTier.totalQuantity;
 
-    if (quantity > availableQuantity) {
-      throw new Error(`Nicht genügend Tickets verfügbar. Nur noch ${availableQuantity} verfügbar.`);
+    if (quantity > currentStock) {
+      throw new Error(`Nicht genügend Tickets verfügbar. Nur noch ${currentStock} verfügbar.`);
     }
 
     // Temporäre Ticket-ID für Webhook-Zuordnung
@@ -199,9 +202,14 @@ const createTicketAfterPayment = async (session, connection) => {
     throw new Error(`Ticketart nicht gefunden: ${tierId}`);
   }
 
+  // Fallback für availableQuantity
+  if (selectedTier.availableQuantity === undefined) {
+    selectedTier.availableQuantity = selectedTier.totalQuantity;
+  }
+
   // Finale Verfügbarkeitsprüfung (Stock prüfen)
-  if (parseInt(quantity) > selectedTier.totalQuantity) {
-    throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${selectedTier.totalQuantity} verfügbar.`);
+  if (parseInt(quantity) > selectedTier.availableQuantity) {
+    throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${selectedTier.availableQuantity} verfügbar.`);
   }
 
   // QR-Code generieren
@@ -240,7 +248,12 @@ const createTicketAfterPayment = async (session, connection) => {
   );
 
   // Ticket abziehen (Stock reduzieren)
-  selectedTier.totalQuantity = Math.max(0, selectedTier.totalQuantity - parseInt(quantity));
+  selectedTier.availableQuantity = Math.max(0, selectedTier.availableQuantity - parseInt(quantity));
+
+  // Sold Out Flag setzen wenn 0
+  if (selectedTier.availableQuantity === 0) {
+    selectedTier.isSoldOut = true;
+  }
 
   // Event aktualisieren
   await connection.execute(
