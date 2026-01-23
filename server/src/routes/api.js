@@ -16,7 +16,6 @@ const checkoutLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   message: "Too many checkout attempts from this IP, please try again after 15 minutes.",
-  trustProxy: 1, // Trust the first proxy hop (e.g., Nginx, Vercel)
 });
 
 
