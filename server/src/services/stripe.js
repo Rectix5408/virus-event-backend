@@ -250,9 +250,13 @@ const createTicketAfterPayment = async (session, connection) => {
     eventId
   };
 
-  await sendTicketEmail(ticketData, eventDetails);
-
-  console.log(`✓ Ticket ${ticketId} erfolgreich erstellt und Email versendet`);
+  try {
+    await sendTicketEmail(ticketData, eventDetails);
+    console.log(`✓ Ticket ${ticketId} erfolgreich erstellt und Email versendet`);
+  } catch (emailError) {
+    console.error(`⚠ Ticket ${ticketId} erstellt, aber Email-Versand fehlgeschlagen:`, emailError.message);
+    // Fehler nicht weiterwerfen, damit Ticket in DB gespeichert bleibt
+  }
 };
 
 /**
