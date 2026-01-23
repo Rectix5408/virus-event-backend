@@ -62,6 +62,16 @@ app.use('/api/merch/webhook', express.raw({ type: 'application/json' }));
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
+// Middleware: Datum-Format für MySQL fixen (ISO String -> YYYY-MM-DD)
+app.use((req, res, next) => {
+  if (req.body && req.body.dateISO && typeof req.body.dateISO === 'string') {
+    if (req.body.dateISO.includes('T')) {
+      req.body.dateISO = req.body.dateISO.split('T')[0];
+    }
+  }
+  next();
+});
+
 // Uploads öffentlich
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
