@@ -15,7 +15,7 @@ const stripe = new Stripe(stripeKey || 'sk_test_dummy_key_to_prevent_crash');
  * Erstellt eine Stripe Checkout Session (OHNE Ticket zu erstellen)
  */
 export const createCheckoutSession = async (payload) => {
-  const { tierId, quantity, email, firstName, lastName, eventId, successUrl, cancelUrl } = payload;
+  const { tierId, quantity, email, firstName, lastName, address, zipCode, city, mobileNumber, eventId, successUrl, cancelUrl } = payload;
   const db = getDatabase();
   const connection = await db.getConnection();
 
@@ -79,6 +79,10 @@ export const createCheckoutSession = async (payload) => {
         firstName: firstName,
         lastName: lastName,
         email: email,
+        address: address,
+        zipCode: zipCode,
+        city: city,
+        mobileNumber: mobileNumber,
       },
       expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 Minuten
       payment_intent_data: {
@@ -163,7 +167,7 @@ const handleCheckoutCompleted = async (session) => {
  * Erstellt Ticket NACH erfolgreicher Zahlung
  */
 const createTicketAfterPayment = async (session, connection) => {
-  const { ticketId, eventId, tierId, quantity, firstName, lastName, email } = session.metadata;
+  const { ticketId, eventId, tierId, quantity, firstName, lastName, email, address, zipCode, city, mobileNumber } = session.metadata;
 
   // Prüfen ob Ticket bereits existiert (Duplikat-Schutz)
   const [existing] = await connection.execute(
@@ -228,13 +232,17 @@ const createTicketAfterPayment = async (session, connection) => {
 
   // Ticket in Datenbank speichern
   await connection.execute(
-    `INSERT INTO tickets (id, email, firstName, lastName, tierId, tierName, eventId, quantity, qrCode, paymentIntentId, status, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
+    `INSERT INTO tickets (id, email, firstName, lastName, address, zipCode, city, mobileNumber, tierId, tierName, eventId, quantity, qrCode, paymentIntentId, status, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
     [
       ticketId,
       email,
       firstName,
       lastName,
+      address,
+      zipCode,
+      city,
+      mobileNumber,
       tierId,
       selectedTier.name,
       eventId,
@@ -275,6 +283,10 @@ const createTicketAfterPayment = async (session, connection) => {
     email,
     firstName,
     lastName,
+    address,
+    zipCode,
+    city,
+    mobileNumber,
     tierName: selectedTier.name,
     quantity: parseInt(quantity),
     qrCode: qrCodeImage,

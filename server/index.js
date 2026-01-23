@@ -73,7 +73,11 @@ app.use((req, res, next) => {
 });
 
 // Uploads öffentlich
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
+  maxAge: '1d', // Bilder für 1 Tag im Browser cachen
+  etag: true,   // Verhindert erneutes Laden, wenn sich nichts geändert hat
+  immutable: false
+}));
 
 // Health Check
 const healthCheck = async (req, res) => {

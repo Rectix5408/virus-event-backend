@@ -26,10 +26,10 @@ const checkoutLimiter = rateLimit({
  */
 router.post("/create-checkout-session", checkoutLimiter, async (req, res) => {
   try {
-    const { tierId, quantity, email, firstName, lastName, eventId, successUrl, cancelUrl } = req.body;
+    const { tierId, quantity, email, firstName, lastName, address, zipCode, city, mobileNumber, eventId, successUrl, cancelUrl } = req.body;
 
     // Validation
-    if (!tierId || !quantity || !email || !firstName || !lastName || !eventId) {
+    if (!tierId || !quantity || !email || !firstName || !lastName || !address || !zipCode || !city || !mobileNumber || !eventId) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
@@ -48,6 +48,10 @@ router.post("/create-checkout-session", checkoutLimiter, async (req, res) => {
       email,
       firstName,
       lastName,
+      address,
+      zipCode,
+      city,
+      mobileNumber,
       eventId,
       successUrl: successUrl || `${process.env.FRONTEND_URL}/tickets/success`,
       cancelUrl: cancelUrl || `${process.env.FRONTEND_URL}/tickets`,
