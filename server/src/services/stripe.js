@@ -3,7 +3,6 @@ import { getDatabase } from "../config/database.js";
 import { sendTicketEmail } from "./email.js";
 import { generateTicketId, generateTicketQRData } from "../utils/helpers.js";
 import QRCode from "qrcode";
-import { getEventById } from "./event.js";
 
 // Sicherstellen, dass der Server nicht abstürzt, wenn der Key fehlt
 const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -41,14 +40,8 @@ export const createCheckoutSession = async (payload) => {
       throw new Error(`Ungültige Ticketart: ${tierId}`);
     }
 
-    // Verfügbarkeit prüfen (mit Reservierungslogik)
-    const [soldTickets] = await connection.execute(
-      `SELECT COUNT(*) as count FROM tickets 
-       WHERE eventId = ? AND tierId = ? AND status IN ('confirmed', 'pending')`,
-      [eventId, tierId]
-    );
-
-    const availableQuantity = selectedTier.totalQuantity - soldTickets[0].count;
+    // Verfügbarkeit prüfen (totalQuantity ist jetzt der Restbestand)
+    const availableQuantity = selectedTier.totalQuantity;
 
     if (quantity > availableQuantity) {
       throw new Error(`Nicht genügend Tickets verfügbar. Nur noch ${availableQuantity} verfügbar.`);
@@ -185,27 +178,30 @@ const createTicketAfterPayment = async (session, connection) => {
     return;
   }
 
-  // Event-Details laden
-  const event = await getEventById(eventId);
+  // Event-Details laden und sperren für Update
+  const [eventRows] = await connection.execute(
+    "SELECT * FROM events WHERE id = ? FOR UPDATE",
+    [eventId]
+  );
+  const event = eventRows[0];
   if (!event) {
     throw new Error(`Event nicht gefunden: ${eventId}`);
   }
 
-  const selectedTier = event.ticketTiers.find(t => t.id === tierId);
+  // Tiers parsen
+  let ticketTiers = event.ticketTiers;
+  if (typeof ticketTiers === 'string') {
+    ticketTiers = JSON.parse(ticketTiers);
+  }
+
+  const selectedTier = ticketTiers.find(t => t.id === tierId);
   if (!selectedTier) {
     throw new Error(`Ticketart nicht gefunden: ${tierId}`);
   }
 
-  // Finale Verfügbarkeitsprüfung
-  const [soldTickets] = await connection.execute(
-    `SELECT COUNT(*) as count FROM tickets 
-     WHERE eventId = ? AND tierId = ? AND status = 'confirmed'`,
-    [eventId, tierId]
-  );
-
-  const availableQuantity = selectedTier.totalQuantity - soldTickets[0].count;
-  if (parseInt(quantity) > availableQuantity) {
-    throw new Error(`Tickets nicht mehr verfügbar (bereits ${soldTickets[0].count} von ${selectedTier.totalQuantity} verkauft)`);
+  // Finale Verfügbarkeitsprüfung (Stock prüfen)
+  if (parseInt(quantity) > selectedTier.totalQuantity) {
+    throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${selectedTier.totalQuantity} verfügbar.`);
   }
 
   // QR-Code generieren
@@ -234,6 +230,15 @@ const createTicketAfterPayment = async (session, connection) => {
       qrCodeImage,
       session.payment_intent
     ]
+  );
+
+  // Ticket abziehen (Stock reduzieren)
+  selectedTier.totalQuantity = Math.max(0, selectedTier.totalQuantity - parseInt(quantity));
+
+  // Event aktualisieren
+  await connection.execute(
+    "UPDATE events SET ticketTiers = ? WHERE id = ?",
+    [JSON.stringify(ticketTiers), eventId]
   );
 
   // Email mit Ticket versenden
