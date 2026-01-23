@@ -20,28 +20,6 @@ import { initializeDatabase, createTables, getDatabase } from "./src/config/data
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Upload Ordner erstellen
-const uploadDir = path.join(__dirname, "uploads");
-const uploadSubDirs = ["events", "merch", "products", "misc"]; // Wichtige Unterordner
-
-try {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log(`📂 Created upload directory at: ${uploadDir}`);
-  }
-  
-  // Unterordner erstellen, um ENOENT Fehler beim Upload zu vermeiden
-  uploadSubDirs.forEach(dir => {
-    const subPath = path.join(uploadDir, dir);
-    if (!fs.existsSync(subPath)) {
-      fs.mkdirSync(subPath, { recursive: true });
-      console.log(`📂 Created upload subdirectory: ${subPath}`);
-    }
-  });
-} catch (err) {
-  console.error(`❌ Failed to create upload directory: ${err.message}`);
-}
-
 const app = express();
 // Proxy-Einstellungen für Rate-Limiting und korrekte IP-Erkennung (wichtig für Nginx/Plesk)
 app.set('trust proxy', 1);
@@ -92,7 +70,12 @@ const healthCheck = async (req, res) => {
   let dbStatus = "disconnected";
   try {
     const pool = getDatabase();
-    if (pool) await pool.query("SELECT 1") && (dbStatus = "connected");
+    if (pool) {
+      // Timeout für DB Check um hängende Requests zu vermeiden (max 1 Sekunde)
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1000));
+      await Promise.race([pool.query("SELECT 1"), timeout]);
+      dbStatus = "connected";
+    }
   } catch (err) {
     dbStatus = "error: " + err.message;
   }
@@ -162,12 +145,18 @@ process.on('unhandledRejection', (err) => {
 const startServer = async () => {
   try {
     console.log("🔄 Initializing database...");
-    const dbConnected = await initializeDatabase();
+    
+    // Timeout für DB-Verbindung hinzufügen (max 5 Sekunden warten), damit der Server nicht ewig hängt
+    const dbPromise = initializeDatabase();
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(false), 5000));
+    const dbConnected = await Promise.race([dbPromise, timeoutPromise]).catch(err => { console.error(err); return false; });
+
     if (!dbConnected) {
-      console.warn("⚠ Database connection failed. Offline mode enabled.");
+      console.warn("⚠ Database connection failed or timed out. Offline mode enabled.");
     } else {
       console.log("🔄 Creating tables...");
-      await createTables();
+      // Fehler beim Tabellenerstellen abfangen, damit Server trotzdem startet
+      await createTables().catch(err => console.error("⚠ Failed to create tables:", err.message));
     }
 
     const emailReady = await verifyEmailService().catch(() => false);
