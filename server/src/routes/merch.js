@@ -44,6 +44,19 @@ const upload = multer({
   }
 });
 
+// Hilfsfunktion zum sicheren Parsen von Bildern
+const parseImages = (data) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  try {
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch (e) {
+    // Falls es kein gültiges JSON ist, aber ein String (z.B. alter Pfad), geben wir es als Array zurück
+    return typeof data === 'string' ? [data] : [];
+  }
+};
+
 // CRUD Routes (unverändert, ausgelassen für Kürze)
 router.get('/products', async (req, res) => {
   try {
@@ -51,7 +64,7 @@ router.get('/products', async (req, res) => {
     const [products] = await pool.query('SELECT * FROM merch_products ORDER BY created_at DESC');
     const parsedProducts = products.map(p => ({
       ...p,
-      images: typeof p.images === 'string' ? JSON.parse(p.images || '[]') : (p.images || []),
+      images: parseImages(p.images),
       sizes: typeof p.sizes === 'string' ? JSON.parse(p.sizes || '[]') : (p.sizes || []),
       stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
       price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
@@ -70,7 +83,7 @@ router.get('/products/:id', async (req, res) => {
     const p = products[0];
     const parsedProduct = {
       ...p,
-      images: typeof p.images === 'string' ? JSON.parse(p.images || '[]') : (p.images || []),
+      images: parseImages(p.images),
       sizes: typeof p.sizes === 'string' ? JSON.parse(p.sizes || '[]') : (p.sizes || []),
       stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
       price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
