@@ -79,29 +79,8 @@ export const createCheckoutSession = async (payload) => {
 
     // Stripe Session erstellen (OHNE Ticket in DB zu speichern)
     const sessionParams = {
-      payment_method_types: [
-        "card", // Deckt Apple Pay, Google Pay, Samsung Pay ab
-        // "cartes_bancaires", // Verursacht Fehler, wird oft über 'card' abgewickelt
-        "paypal",
-        "amazon_pay",
-        "revolut_pay",
-        "link",
-        "mb_way",
-        "sepa_debit",
-        "bancontact",
-        "ideal",
-        "eps",
-        "sofort",
-        "klarna",
-        "customer_balance" // bank_transfer
-      ],
-      payment_method_options: {
-        customer_balance: {
-          funding_type: 'bank_transfer',
-          bank_transfer: {
-            type: 'eu_bank_transfer',
-          },
-        },
+      automatic_payment_methods: {
+        enabled: true,
       },
       billing_address_collection: 'required',
       line_items: [{
