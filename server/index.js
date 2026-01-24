@@ -217,7 +217,7 @@ const startServer = async () => {
     if (!emailReady) console.warn("⚠ Email service not ready. Emails disabled.");
 
     const server = http.createServer(app);
-    initSocket(server);
+    initSocket(server, allowedOrigins);
 
     server.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);

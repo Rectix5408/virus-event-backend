@@ -2,11 +2,11 @@ import { Server } from "socket.io";
 
 let io;
 
-export const initSocket = (httpServer) => {
+export const initSocket = (httpServer, allowedOrigins) => {
   io = new Server(httpServer, {
     cors: {
       // Erlaube Frontend-Zugriff
-      origin: process.env.FRONTEND_URL || "*", 
+      origin: allowedOrigins || process.env.FRONTEND_URL || "*", 
       methods: ["GET", "POST"]
     }
   });
