@@ -12,7 +12,7 @@ if (!stripeKey) {
   console.error("❌ CRITICAL: STRIPE_SECRET_KEY fehlt in den Umgebungsvariablen! Überprüfe die .env Datei.");
 }
 const stripe = new Stripe(stripeKey || 'sk_test_dummy_key_to_prevent_crash', {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2026-08-01',
 });
 
 /**

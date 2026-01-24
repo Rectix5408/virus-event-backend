@@ -11,7 +11,9 @@ import redisClient from '../config/redis.js';
 import { getIO } from '../services/socket.js';
 import { rateLimit } from '../middleware/rateLimiter.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: '2026-08-01',
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -312,7 +314,10 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
 
     // Stripe Session erstellen (OHNE Bestellung zu speichern)
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      automatic_payment_methods: {
+        enabled: true,
+      },
+      billing_address_collection: 'required',
       line_items: [{
         price_data: {
           currency: 'eur',
