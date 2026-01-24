@@ -57,8 +57,33 @@ export const createCheckoutSession = async (payload) => {
 
     // Stripe Session erstellen (OHNE Ticket in DB zu speichern)
     const session = await stripe.checkout.sessions.create({
-      automatic_payment_methods: {
-        enabled: true,
+      payment_method_types: [
+        "card", // Deckt Apple Pay, Google Pay, Samsung Pay ab
+        "cartes_bancaires",
+        "paypal",
+        "amazon_pay",
+        "revolut_pay",
+        "link",
+        "mb_way",
+        // "kakao_pay", // Erfordert Währung KRW
+        // "naver_pay", // Erfordert Währung KRW
+        // "payco",     // Erfordert Währung KRW
+        "sepa_debit",
+        "bancontact",
+        "ideal",
+        // "blik",      // Erfordert Währung PLN
+        "eps",
+        "sofort",
+        "klarna",
+        "customer_balance" // bank_transfer
+      ],
+      payment_method_options: {
+        customer_balance: {
+          funding_type: 'bank_transfer',
+          bank_transfer: {
+            type: 'eu_bank_transfer',
+          },
+        },
       },
       billing_address_collection: 'required',
       line_items: [{
