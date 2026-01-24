@@ -55,8 +55,30 @@ export const createCheckoutSession = async (payload) => {
     // Temporäre Ticket-ID für Webhook-Zuordnung
     const tempTicketId = generateTicketId();
 
+    // FIX: customer_balance (Banküberweisung) erfordert zwingend ein Customer Object
+    let customerId;
+    try {
+      // 1. Prüfen ob Kunde existiert (vermeidet Duplikate)
+      const existingCustomers = await stripe.customers.list({ email: email, limit: 1 });
+      
+      if (existingCustomers.data.length > 0) {
+        customerId = existingCustomers.data[0].id;
+      } else {
+        // 2. Neuen Kunden erstellen
+        const newCustomer = await stripe.customers.create({
+          email,
+          name: `${firstName} ${lastName}`,
+          metadata: { mobileNumber }
+        });
+        customerId = newCustomer.id;
+      }
+    } catch (err) {
+      console.warn("Konnte Stripe Customer nicht verarbeiten:", err);
+      // Fallback: Wir machen weiter, aber customer_balance könnte fehlschlagen
+    }
+
     // Stripe Session erstellen (OHNE Ticket in DB zu speichern)
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams = {
       payment_method_types: [
         "card", // Deckt Apple Pay, Google Pay, Samsung Pay ab
         // "cartes_bancaires", // Verursacht Fehler, wird oft über 'card' abgewickelt
@@ -97,7 +119,6 @@ export const createCheckoutSession = async (payload) => {
       mode: "payment",
       success_url: `${successUrl}${successUrl.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,
-      customer_email: email,
       metadata: {
         type: "ticket",
         ticketId: tempTicketId,
@@ -120,8 +141,17 @@ export const createCheckoutSession = async (payload) => {
           eventId: eventId,
         }
       }
-    });
+    };
     
+    // WICHTIG: Entweder customer ODER customer_email setzen, nicht beides
+    if (customerId) {
+      sessionParams.customer = customerId;
+    } else {
+      sessionParams.customer_email = email;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
     return {
       sessionId: session.id,
       url: session.url,
