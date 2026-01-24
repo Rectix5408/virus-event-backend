@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import Stripe from 'stripe';
+import { protect } from './auth.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -16,7 +17,7 @@ const router = express.Router();
 // Multer Setup (unverändert)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, '../../uploads');
+    const uploadPath = path.join(__dirname, '../../uploads/merch');
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
     }
@@ -44,12 +45,131 @@ const upload = multer({
 });
 
 // CRUD Routes (unverändert, ausgelassen für Kürze)
-router.get('/products', async (req, res) => { /* ... existing code ... */ });
-router.get('/products/:id', async (req, res) => { /* ... existing code ... */ });
-router.post('/products', upload.array('images', 10), async (req, res) => { /* ... existing code ... */ });
-router.put('/products/:id', upload.array('images', 10), async (req, res) => { /* ... existing code ... */ });
-router.delete('/products/:id', async (req, res) => { /* ... existing code ... */ });
-router.post('/upload', upload.single('image'), async (req, res) => { /* ... existing code ... */ });
+router.get('/products', async (req, res) => {
+  try {
+    const pool = getDatabase();
+    const [products] = await pool.query('SELECT * FROM merch_products ORDER BY created_at DESC');
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/products/:id', async (req, res) => {
+  try {
+    const pool = getDatabase();
+    const [products] = await pool.query('SELECT * FROM merch_products WHERE id = ?', [req.params.id]);
+    if (products.length === 0) return res.status(404).json({ message: 'Produkt nicht gefunden' });
+    res.json(products[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/products', protect, upload.array('images', 10), async (req, res) => {
+  try {
+    const pool = getDatabase();
+    const { name, description, price, category, sizes, stock, isActive, images: bodyImages } = req.body;
+
+    let finalImages = [];
+    
+    // 1. Dateien die direkt hochgeladen wurden (Fallback)
+    if (req.files && req.files.length > 0) {
+      const uploadedFiles = req.files.map(f => `/uploads/merch/${f.filename}`);
+      finalImages = [...finalImages, ...uploadedFiles];
+    }
+
+    // 2. Bild-URLs die vom Upload-System kommen (JSON Body)
+    if (bodyImages) {
+      if (typeof bodyImages === 'string') {
+        try {
+          // Versuchen JSON zu parsen (falls Array als String kommt)
+          const parsed = JSON.parse(bodyImages);
+          if (Array.isArray(parsed)) finalImages = [...finalImages, ...parsed];
+          else finalImages.push(bodyImages);
+        } catch(e) {
+          // Ist wohl eine einzelne URL
+          finalImages.push(bodyImages);
+        }
+      } else if (Array.isArray(bodyImages)) {
+        finalImages = [...finalImages, ...bodyImages];
+      }
+    }
+
+    const sizesJson = typeof sizes === 'string' ? sizes : JSON.stringify(sizes);
+    const stockJson = typeof stock === 'string' ? stock : JSON.stringify(stock);
+    const imagesJson = JSON.stringify(finalImages);
+
+    const [result] = await pool.query(
+      `INSERT INTO merch_products (name, description, price, category, images, sizes, stock, isActive) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description, price, category, imagesJson, sizesJson, stockJson, isActive === 'true' || isActive === true ? 1 : 0]
+    );
+
+    res.status(201).json({ id: result.insertId, message: 'Produkt erstellt', images: finalImages });
+  } catch (error) {
+    console.error('Error creating product:', error);
+    res.status(500).json({ error: 'Fehler beim Erstellen des Produkts' });
+  }
+});
+
+router.put('/products/:id', protect, upload.array('images', 10), async (req, res) => {
+  try {
+    const pool = getDatabase();
+    const { name, description, price, category, sizes, stock, isActive, images: bodyImages } = req.body;
+    const { id } = req.params;
+
+    let finalImages = [];
+    
+    if (req.files && req.files.length > 0) {
+      const uploadedFiles = req.files.map(f => `/uploads/merch/${f.filename}`);
+      finalImages = [...finalImages, ...uploadedFiles];
+    }
+
+    if (bodyImages) {
+      if (typeof bodyImages === 'string') {
+        try {
+          const parsed = JSON.parse(bodyImages);
+          if (Array.isArray(parsed)) finalImages = [...finalImages, ...parsed];
+          else finalImages.push(bodyImages);
+        } catch(e) {
+          finalImages.push(bodyImages);
+        }
+      } else if (Array.isArray(bodyImages)) {
+        finalImages = [...finalImages, ...bodyImages];
+      }
+    }
+
+    const sizesJson = typeof sizes === 'string' ? sizes : JSON.stringify(sizes);
+    const stockJson = typeof stock === 'string' ? stock : JSON.stringify(stock);
+    const imagesJson = JSON.stringify(finalImages);
+
+    await pool.query(
+      `UPDATE merch_products SET name=?, description=?, price=?, category=?, images=?, sizes=?, stock=?, isActive=? WHERE id=?`,
+      [name, description, price, category, imagesJson, sizesJson, stockJson, isActive === 'true' || isActive === true ? 1 : 0, id]
+    );
+
+    res.json({ message: 'Produkt aktualisiert', images: finalImages });
+  } catch (error) {
+    console.error('Error updating product:', error);
+    res.status(500).json({ error: 'Fehler beim Aktualisieren des Produkts' });
+  }
+});
+
+router.delete('/products/:id', protect, async (req, res) => {
+  try {
+    const pool = getDatabase();
+    await pool.query('DELETE FROM merch_products WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Produkt gelöscht' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/upload', protect, upload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'Kein Bild hochgeladen' });
+  res.json({ url: `/uploads/merch/${req.file.filename}` });
+});
 
 // SICHERE CHECKOUT SESSION (keine Bestellung erstellen)
 router.post('/create-checkout-session', async (req, res) => {
