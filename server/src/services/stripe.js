@@ -320,26 +320,52 @@ const createMerchOrderAfterPayment = async (session, connection) => {
   }
 
   const orderId = 'ORD-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-  const parsedAddress = JSON.parse(address);
+  
+  // Adresse parsen und aufteilen (wie beim Ticket-System)
+  let parsedAddress = {};
+  try {
+    parsedAddress = JSON.parse(address || '{}');
+  } catch (e) {
+    console.error("Fehler beim Parsen der Adresse:", e);
+    parsedAddress = {};
+  }
+
+  const street = parsedAddress.street || parsedAddress.line1 || "";
+  const houseNumber = parsedAddress.houseNumber || "";
+  const fullAddress = houseNumber ? `${street} ${houseNumber}` : street;
+  const zip = parsedAddress.postalCode || parsedAddress.postal_code || parsedAddress.zipCode || "";
+  const city = parsedAddress.city || "";
+  const country = parsedAddress.country || "Deutschland";
+
+  // Produkt-Preis aus DB laden für korrekte Daten (vermeidet Shipping-Berechnungsfehler)
+  const [productRows] = await connection.execute(
+    'SELECT price, stock FROM merch_products WHERE id = ?',
+    [productId]
+  );
+  
+  const unitPrice = productRows.length > 0 ? productRows[0].price : (session.amount_total / 100 / parseInt(quantity));
 
   const items = [{
     productId,
     productName,
     size,
     quantity: parseInt(quantity),
-    price: session.amount_total / 100 / parseInt(quantity)
+    price: unitPrice
   }];
 
   // Bestellung speichern
   await connection.execute(
-    `INSERT INTO merch_orders (orderId, email, firstName, lastName, address, items, totalAmount, paymentIntentId, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
+    `INSERT INTO merch_orders (orderId, email, firstName, lastName, address, zipCode, city, country, items, totalAmount, paymentIntentId, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
     [
       orderId,
       session.customer_email,
       firstName,
       lastName,
-      address,
+      fullAddress, // Speichert jetzt Straße + Hausnummer
+      zip,
+      city,
+      country,
       JSON.stringify(items),
       session.amount_total / 100,
       session.payment_intent
@@ -347,13 +373,13 @@ const createMerchOrderAfterPayment = async (session, connection) => {
   );
 
   // Stock reduzieren
-  const [product] = await connection.execute(
-    'SELECT stock FROM merch_products WHERE id = ?',
-    [productId]
-  );
-
-  if (product.length > 0) {
-    const stock = JSON.parse(product[0].stock);
+  if (productRows.length > 0) {
+    let stock = {};
+    try {
+      stock = JSON.parse(productRows[0].stock);
+    } catch (e) {
+      stock = {};
+    }
     stock[size] = Math.max(0, (stock[size] || 0) - parseInt(quantity));
     
     await connection.execute(
