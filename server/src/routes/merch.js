@@ -66,6 +66,7 @@ router.get('/products', async (req, res) => {
     // ⚡ CACHE CHECK
     const cachedProducts = await redisClient.get('merch:products');
     if (cachedProducts) {
+      console.log('⚡ CACHE HIT: Merch Products (aus Redis geladen)');
       return res.json(JSON.parse(cachedProducts));
     }
 
@@ -81,6 +82,7 @@ router.get('/products', async (req, res) => {
 
     // ⚡ CACHE SET (z.B. für 1 Stunde, aber wir invalidieren bei Updates eh manuell)
     await redisClient.set('merch:products', JSON.stringify(parsedProducts), { EX: 3600 });
+    console.log('💾 DB FETCH: Merch Products (aus MySQL geladen & gecached)');
 
     res.json(parsedProducts);
   } catch (error) {
@@ -93,6 +95,7 @@ router.get('/products/:id', async (req, res) => {
     // ⚡ CACHE CHECK SINGLE PRODUCT
     const cachedProduct = await redisClient.get(`merch:product:${req.params.id}`);
     if (cachedProduct) {
+      console.log(`⚡ CACHE HIT: Product ${req.params.id}`);
       return res.json(JSON.parse(cachedProduct));
     }
 
@@ -110,6 +113,7 @@ router.get('/products/:id', async (req, res) => {
 
     // ⚡ CACHE SET
     await redisClient.set(`merch:product:${req.params.id}`, JSON.stringify(parsedProduct), { EX: 3600 });
+    console.log(`💾 DB FETCH: Product ${req.params.id}`);
 
     res.json(parsedProduct);
   } catch (error) {
