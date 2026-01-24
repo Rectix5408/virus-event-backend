@@ -59,19 +59,15 @@ export const createCheckoutSession = async (payload) => {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: [
         "card", // Deckt Apple Pay, Google Pay, Samsung Pay ab
-        "cartes_bancaires",
+        // "cartes_bancaires", // Verursacht Fehler, wird oft über 'card' abgewickelt
         "paypal",
         "amazon_pay",
         "revolut_pay",
         "link",
         "mb_way",
-        // "kakao_pay", // Erfordert Währung KRW
-        // "naver_pay", // Erfordert Währung KRW
-        // "payco",     // Erfordert Währung KRW
         "sepa_debit",
         "bancontact",
         "ideal",
-        // "blik",      // Erfordert Währung PLN
         "eps",
         "sofort",
         "klarna",
