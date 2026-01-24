@@ -132,7 +132,7 @@ router.post('/products', protect, upload.array('images', 10), async (req, res) =
     const [result] = await pool.query(
       `INSERT INTO merch_products (name, description, price, category, images, sizes, stock, isActive) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, description, price, category, imagesJson, sizesJson, stockJson, isActive === 'true' || isActive === true ? 1 : 0]
+      [name, description, price, category, imagesJson, sizesJson, stockJson, isActive === undefined || isActive === 'true' || isActive === true ? 1 : 0]
     );
 
     res.status(201).json({ id: result.insertId, message: 'Produkt erstellt', images: finalImages });
@@ -226,11 +226,18 @@ router.post('/create-checkout-session', async (req, res) => {
     }
 
     const product = products[0];
-    const stock = JSON.parse(product.stock);
+    
+    // Sicherer Stock-Parse (verhindert Crash bei null/invalid JSON)
+    let stock = {};
+    try {
+      stock = typeof product.stock === 'string' ? JSON.parse(product.stock) : (product.stock || {});
+    } catch (e) {
+      stock = {};
+    }
 
-    if (!stock[size] || stock[size] < quantity) {
+    if (!stock || !stock[size] || stock[size] < quantity) {
       return res.status(400).json({ 
-        error: `Nicht genügend Artikel in Größe ${size} verfügbar. Nur noch ${stock[size] || 0} auf Lager.` 
+        error: `Nicht genügend Artikel in Größe ${size} verfügbar. Nur noch ${stock?.[size] || 0} auf Lager.` 
       });
     }
 
@@ -244,6 +251,18 @@ router.post('/create-checkout-session', async (req, res) => {
       };
     }
 
+    // Bilder für Stripe vorbereiten (müssen absolute URLs sein)
+    let stripeImages = [];
+    try {
+      const rawImages = typeof product.images === 'string' ? JSON.parse(product.images) : (product.images || []);
+      if (Array.isArray(rawImages) && rawImages.length > 0) {
+        const baseUrl = 'https://api.virus-event.de'; // Backend URL für Uploads
+        stripeImages = rawImages.slice(0, 1).map(img => img.startsWith('http') ? img : `${baseUrl}${img.startsWith('/') ? '' : '/'}${img}`);
+      }
+    } catch (e) {
+      console.warn('Fehler beim Parsen der Bilder für Stripe:', e);
+    }
+
     // Stripe Session erstellen (OHNE Bestellung zu speichern)
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -253,7 +272,7 @@ router.post('/create-checkout-session', async (req, res) => {
           product_data: {
             name: `${productName} - Größe ${size}`,
             description: `Menge: ${quantity}`,
-            images: product.images ? JSON.parse(product.images).slice(0, 1) : [],
+            images: stripeImages,
           },
           unit_amount: Math.round(parseFloat(price) * 100), // In Cents
         },
