@@ -213,12 +213,16 @@ router.post('/create-checkout-session', async (req, res) => {
     // Produkt und Verfügbarkeit prüfen
     const pool = getDatabase();
     const [products] = await pool.query(
-      'SELECT * FROM merch_products WHERE id = ? AND isActive = true',
+      'SELECT * FROM merch_products WHERE id = ?',
       [productId]
     );
 
     if (products.length === 0) {
       return res.status(404).json({ error: 'Produkt nicht gefunden' });
+    }
+
+    if (!products[0].isActive) {
+      return res.status(400).json({ error: 'Produkt ist derzeit nicht verfügbar (inaktiv)' });
     }
 
     const product = products[0];
