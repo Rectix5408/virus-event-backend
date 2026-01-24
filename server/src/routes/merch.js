@@ -9,6 +9,7 @@ import { protect } from './auth.js';
 import { constructWebhookEvent, handleStripeWebhook } from '../services/stripe.js';
 import redisClient from '../config/redis.js';
 import { getIO } from '../services/socket.js';
+import { rateLimit } from '../middleware/rateLimiter.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -63,6 +64,9 @@ const parseImages = (data) => {
 // CRUD Routes (unverändert, ausgelassen für Kürze)
 router.get('/products', async (req, res) => {
   try {
+    // ⚡ HTTP CACHE: Browser soll das Ergebnis für 60 Sekunden cachen
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
+
     // ⚡ CACHE CHECK
     const cachedProducts = await redisClient.get('merch:products');
     if (cachedProducts) {
@@ -242,7 +246,9 @@ router.post('/upload', protect, upload.single('image'), async (req, res) => {
 });
 
 // SICHERE CHECKOUT SESSION (keine Bestellung erstellen)
-router.post('/create-checkout-session', async (req, res) => {
+// 🛡️ SECURITY: Strenges Rate Limiting für Checkout (10 Versuche pro 15 Min)
+// Verhindert Stripe-API-Kosten und DB-Spam
+router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'checkout' }), async (req, res) => {
   try {
     const { productId, productName, size, quantity, price, email, firstName, lastName, address, zipCode, city, mobileNumber, successUrl, cancelUrl } = req.body;
     

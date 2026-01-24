@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { protect } from './auth.js';
+import { rateLimit } from '../middleware/rateLimiter.js';
 
 // Fix für __dirname in ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -64,8 +65,11 @@ const upload = multer({
   limits: limits
 });
 
+// 🛡️ SECURITY: Upload Rate Limit (20 Uploads pro Stunde pro IP)
+const uploadLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, keyPrefix: 'upload' });
+
 // Universeller Upload-Endpunkt
-router.post('/:entity', protect, (req, res, next) => {
+router.post('/:entity', protect, uploadLimiter, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({ message: `Upload Fehler: ${err.message}` });
@@ -94,7 +98,7 @@ router.post('/:entity', protect, (req, res, next) => {
 });
 
 // Mehrere Dateien hochladen
-router.post('/:entity/multiple', protect, upload.array('files', 10), (req, res) => {
+router.post('/:entity/multiple', protect, uploadLimiter, upload.array('files', 10), (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ message: 'Keine Dateien hochgeladen.' });
   }

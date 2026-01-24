@@ -17,6 +17,7 @@ import webhookRouter from './src/routes/webhook.js';
 import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
 import { initSocket } from "./src/services/socket.js";
+import { rateLimit } from "./src/middleware/rateLimiter.js";
 
 // Pfad Setup
 const __filename = fileURLToPath(import.meta.url);
@@ -106,9 +107,18 @@ app.get("/api", (req, res) => {
   res.send("VIRUS EVENT API is running 🚀");
 });
 
-// Cache-Control für API-Routen (Verhindert Caching alter URLs)
+// 🛡️ SECURITY: Globales Rate Limiting
+// Erlaubt 300 Requests pro 1 Minute pro IP (genug für normale Nutzung, blockt Angriffe)
+app.use("/api", rateLimit({ windowMs: 60 * 1000, max: 300, keyPrefix: 'global' }));
+
+// Cache-Control Optimierung
 app.use("/api", (req, res, next) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  // Für GET Requests erlauben wir kurzes Caching (10s), um F5-Spam auf DB zu reduzieren
+  if (req.method === 'GET') {
+    res.set('Cache-Control', 'public, max-age=10, must-revalidate');
+  } else {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  }
   next();
 });
 

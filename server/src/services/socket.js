@@ -1,4 +1,5 @@
 import { Server } from "socket.io";
+import { socketRateLimit } from "../middleware/rateLimiter.js";
 
 let io;
 
@@ -11,6 +12,9 @@ export const initSocket = (httpServer, allowedOrigins) => {
     }
   });
   
+  // 🛡️ SECURITY: Rate Limit für Verbindungsaufbau
+  io.use(socketRateLimit);
+
   console.log("✅ Socket.io Initialized");
   
   io.on("connection", (socket) => {
