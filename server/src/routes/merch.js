@@ -49,7 +49,14 @@ router.get('/products', async (req, res) => {
   try {
     const pool = getDatabase();
     const [products] = await pool.query('SELECT * FROM merch_products ORDER BY created_at DESC');
-    res.json(products);
+    const parsedProducts = products.map(p => ({
+      ...p,
+      images: typeof p.images === 'string' ? JSON.parse(p.images || '[]') : (p.images || []),
+      sizes: typeof p.sizes === 'string' ? JSON.parse(p.sizes || '[]') : (p.sizes || []),
+      stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
+      price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
+    }));
+    res.json(parsedProducts);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -60,7 +67,15 @@ router.get('/products/:id', async (req, res) => {
     const pool = getDatabase();
     const [products] = await pool.query('SELECT * FROM merch_products WHERE id = ?', [req.params.id]);
     if (products.length === 0) return res.status(404).json({ message: 'Produkt nicht gefunden' });
-    res.json(products[0]);
+    const p = products[0];
+    const parsedProduct = {
+      ...p,
+      images: typeof p.images === 'string' ? JSON.parse(p.images || '[]') : (p.images || []),
+      sizes: typeof p.sizes === 'string' ? JSON.parse(p.sizes || '[]') : (p.sizes || []),
+      stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
+      price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
+    };
+    res.json(parsedProduct);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
