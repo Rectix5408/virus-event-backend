@@ -55,7 +55,9 @@ export const createCheckoutSession = async (payload) => {
 
     // Stripe Session erstellen (OHNE Ticket in DB zu speichern)
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
+      automatic_payment_methods: {
+        enabled: true,
+      },
       line_items: [{
         price_data: {
           currency: "eur",
@@ -150,9 +152,9 @@ const handleCheckoutCompleted = async (session) => {
 
     // Typ prüfen (Ticket vs Merch)
     if (metadata.type === "ticket") {
-      await createTicketAfterPayment(session, connection);
+      await createTicketAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, connection);
     } else if (metadata.type === "merch") {
-      await createMerchOrderAfterPayment(session, connection);
+      await createMerchOrderAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, session.customer_email, connection);
     }
 
     await connection.commit();
@@ -168,17 +170,17 @@ const handleCheckoutCompleted = async (session) => {
 /**
  * Erstellt Ticket NACH erfolgreicher Zahlung
  */
-const createTicketAfterPayment = async (session, connection) => {
-  const { ticketId, eventId, tierId, quantity, firstName, lastName, email, address, zipCode, city, mobileNumber } = session.metadata;
+export const createTicketAfterPayment = async (metadata, paymentId, amountTotal, connection) => {
+  const { ticketId, eventId, tierId, quantity, firstName, lastName, email, address, zipCode, city, mobileNumber } = metadata;
 
   // Prüfen ob Ticket bereits existiert (Duplikat-Schutz)
   const [existing] = await connection.execute(
     "SELECT id FROM tickets WHERE paymentIntentId = ?",
-    [session.payment_intent]
+    [paymentId]
   );
 
   if (existing.length > 0) {
-    console.log(`✓ Ticket bereits erstellt für Payment Intent: ${session.payment_intent}`);
+    console.log(`✓ Ticket bereits erstellt für Payment ID: ${paymentId}`);
     return;
   }
 
@@ -250,7 +252,7 @@ const createTicketAfterPayment = async (session, connection) => {
       eventId,
       parseInt(quantity),
       qrCodeImage,
-      session.payment_intent
+      paymentId
     ]
   );
 
@@ -317,17 +319,17 @@ const createTicketAfterPayment = async (session, connection) => {
 /**
  * Erstellt Merch-Bestellung NACH erfolgreicher Zahlung
  */
-const createMerchOrderAfterPayment = async (session, connection) => {
-  const { productId, productName, size, quantity, firstName, lastName, address } = session.metadata;
+export const createMerchOrderAfterPayment = async (metadata, paymentId, amountTotal, customerEmail, connection) => {
+  const { productId, productName, size, quantity, firstName, lastName, address } = metadata;
 
   // Prüfen ob Bestellung bereits existiert
   const [existing] = await connection.execute(
     "SELECT orderId FROM merch_orders WHERE paymentIntentId = ?",
-    [session.payment_intent]
+    [paymentId]
   );
 
   if (existing.length > 0) {
-    console.log(`✓ Merch-Bestellung bereits erstellt für Payment Intent: ${session.payment_intent}`);
+    console.log(`✓ Merch-Bestellung bereits erstellt für Payment ID: ${paymentId}`);
     return;
   }
 
@@ -354,8 +356,8 @@ const createMerchOrderAfterPayment = async (session, connection) => {
     'SELECT price, stock FROM merch_products WHERE id = ? FOR UPDATE',
     [productId]
   );
-  
-  const unitPrice = productRows.length > 0 ? productRows[0].price : (session.amount_total / 100 / parseInt(quantity));
+
+  const unitPrice = productRows.length > 0 ? productRows[0].price : (amountTotal / parseInt(quantity));
 
   const items = [{
     productId,
@@ -371,7 +373,7 @@ const createMerchOrderAfterPayment = async (session, connection) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
     [
       orderId,
-      session.customer_email,
+      customerEmail,
       firstName,
       lastName,
       fullAddress, // Speichert jetzt Straße + Hausnummer
@@ -379,8 +381,8 @@ const createMerchOrderAfterPayment = async (session, connection) => {
       city,
       country,
       JSON.stringify(items),
-      session.amount_total / 100,
-      session.payment_intent
+      amountTotal,
+      paymentId
     ]
   );
 

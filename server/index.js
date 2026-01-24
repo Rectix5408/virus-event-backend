@@ -60,6 +60,7 @@ app.options('*', cors(corsOptions));
 // Webhook routes BEFORE body parser (need raw body)
 app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
 app.use('/api/merch/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/webhooks/paypal', express.raw({ type: 'application/json' }));
 
 // Body Parser
 app.use(bodyParser.json({ limit: '50mb' }));

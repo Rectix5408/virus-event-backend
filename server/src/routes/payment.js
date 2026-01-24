@@ -1,46 +1,63 @@
 import express from 'express';
-import Stripe from 'stripe';
+import { createPayPalOrder, capturePayPalOrder } from '../services/paypal.js';
+import { getDatabase } from '../config/database.js';
+import { generateTicketId } from '../utils/helpers.js';
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Endpoint: POST /payment/verify-session
-router.post('/verify-session', async (req, res) => {
+// PayPal Order erstellen
+router.post('/paypal/create-order', async (req, res) => {
   try {
-    const { sessionId } = req.body;
+    const { tierId, quantity, eventId, type, productId, size } = req.body;
+    
+    // Preis serverseitig berechnen (Sicherheit!)
+    const db = getDatabase();
+    let price = 0;
 
-    if (!sessionId) {
-      return res.status(400).json({ error: 'Session ID is required' });
+    if (type === 'ticket') {
+      const [rows] = await db.query("SELECT ticketTiers FROM events WHERE id = ?", [eventId]);
+      if (!rows.length) throw new Error("Event nicht gefunden");
+      
+      let tiers = rows[0].ticketTiers;
+      if (typeof tiers === 'string') tiers = JSON.parse(tiers);
+
+      const tier = tiers.find(t => t.id === tierId);
+      if (!tier) throw new Error("Ticketart nicht gefunden");
+      price = tier.price * quantity;
+    } else if (type === 'merch') {
+      const [rows] = await db.query("SELECT price FROM merch_products WHERE id = ?", [productId]);
+      if (!rows.length) throw new Error("Produkt nicht gefunden");
+      price = rows[0].price * quantity;
     }
 
-    // Session von Stripe abrufen
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const order = await createPayPalOrder(price);
+    res.json(order);
+  } catch (error) {
+    console.error("PayPal Create Order Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
+// PayPal Order capturen (abschließen)
+router.post('/paypal/capture-order', async (req, res) => {
+  try {
+    const { orderID, metadata } = req.body;
+    
+    // Ticket-ID generieren, falls noch nicht vorhanden
+    if (metadata.type === 'ticket' && !metadata.ticketId) {
+      metadata.ticketId = generateTicketId();
     }
 
-    if (session.payment_status === 'paid') {
-      const metadata = session.metadata || {};
-
-      res.json({ 
-        success: true, 
-        verified: true,
-        session,
-        eventId: metadata.eventId,
-        email: session.customer_details?.email || metadata.email,
-        firstName: metadata.firstName,
-        lastName: metadata.lastName,
-        tierName: metadata.tierName || metadata.tierId,
-        quantity: parseInt(metadata.quantity || '1', 10),
-        ticketId: metadata.ticketId || session.id.slice(-8).toUpperCase()
-      });
+    const result = await capturePayPalOrder(orderID, metadata);
+    
+    if (result.success) {
+      res.json(result);
     } else {
-      res.status(400).json({ success: false, error: 'Payment not completed', status: session.payment_status });
+      res.status(400).json({ error: "Zahlung konnte nicht abgeschlossen werden", details: result.details });
     }
   } catch (error) {
-    console.error('Payment verification error:', error);
-    res.status(500).json({ error: 'Internal server error during verification' });
+    console.error("PayPal Capture Error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
