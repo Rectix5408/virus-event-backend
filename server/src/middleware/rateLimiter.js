@@ -16,8 +16,13 @@ setInterval(() => {
   }
 }, 60000); // Check every minute
 
-const createLimiter = (options) => {
-  const { windowMs, max, message, prefix } = options;
+const createLimiter = (options = {}) => {
+  const { 
+    windowMs = 15 * 60 * 1000, 
+    max = 100, 
+    message = { error: 'Too many requests' }, 
+    prefix = 'limit' 
+  } = options;
 
   return (req, res, next) => {
     // Get IP (support proxy like Nginx/Plesk)
@@ -53,7 +58,7 @@ export const apiLimiter = createLimiter({
   message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' }
 });
 
-export const rateLimit = apiLimiter;
+export const rateLimit = createLimiter;
 
 // Stricter Auth Rate Limiter
 export const authLimiter = createLimiter({
