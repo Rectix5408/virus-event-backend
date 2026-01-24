@@ -65,10 +65,19 @@ const upload = multer({
 });
 
 // Universeller Upload-Endpunkt
-router.post('/:entity', protect, upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: 'Keine Datei hochgeladen.' });
-  }
+router.post('/:entity', protect, (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: `Upload Fehler: ${err.message}` });
+    } else if (err) {
+      return res.status(500).json({ message: `Server Fehler: ${err.message}` });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'Keine Datei hochgeladen.' });
+    }
+    next();
+  });
+}, (req, res) => {
 
   const fileUrl = `/uploads/${req.params.entity}/${req.file.filename}`;
   const fileInfo = {
