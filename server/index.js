@@ -1,5 +1,6 @@
 import "dotenv/config"; // <--- MUSS GANZ OBEN STEHEN
 import express from "express";
+import http from "http";
 import cors from "cors";
 import bodyParser from "body-parser";
 import path from "path";
@@ -15,6 +16,7 @@ import paymentRoutes from './src/routes/payment.js';
 import webhookRouter from './src/routes/webhook.js';
 import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
+import { initSocket } from "./src/services/socket.js";
 
 // Pfad Setup
 const __filename = fileURLToPath(import.meta.url);
@@ -214,7 +216,10 @@ const startServer = async () => {
     const emailReady = await verifyEmailService().catch(() => false);
     if (!emailReady) console.warn("⚠ Email service not ready. Emails disabled.");
 
-    app.listen(PORT, () => {
+    const server = http.createServer(app);
+    initSocket(server);
+
+    server.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`✓ CORS enabled for: ${allowedOrigins.join(", ")}`);
     });
