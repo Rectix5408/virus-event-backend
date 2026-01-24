@@ -12,7 +12,7 @@ import { getIO } from '../services/socket.js';
 import { rateLimit } from '../middleware/rateLimiter.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2026-08-01',
+  apiVersion: '2024-06-20',
 });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -314,9 +314,6 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
 
     // Stripe Session erstellen (OHNE Bestellung zu speichern)
     const session = await stripe.checkout.sessions.create({
-      automatic_payment_methods: {
-        enabled: true,
-      },
       billing_address_collection: 'required',
       line_items: [{
         price_data: {
