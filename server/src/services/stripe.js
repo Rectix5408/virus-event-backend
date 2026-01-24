@@ -12,7 +12,7 @@ if (!stripeKey) {
   console.error("❌ CRITICAL: STRIPE_SECRET_KEY fehlt in den Umgebungsvariablen! Überprüfe die .env Datei.");
 }
 const stripe = new Stripe(stripeKey || 'sk_test_dummy_key_to_prevent_crash', {
-  apiVersion: '2024-06-20',
+  apiVersion: '2024-12-18.acacia',
 });
 
 /**
@@ -77,6 +77,21 @@ export const createCheckoutSession = async (payload) => {
       // Fallback: Wir machen weiter, aber customer_balance könnte fehlschlagen
     }
 
+    const metadata = {
+      type: "ticket",
+      ticketId: tempTicketId,
+      eventId: eventId,
+      tierId: tierId,
+      quantity: quantity.toString(),
+      firstName: firstName,
+      lastName: lastName,
+      email: email,
+      address: address,
+      zipCode: zipCode,
+      city: city,
+      mobileNumber: mobileNumber,
+    };
+
     // Stripe Session erstellen (OHNE Ticket in DB zu speichern)
     const sessionParams = {
       automatic_payment_methods: {
@@ -98,27 +113,10 @@ export const createCheckoutSession = async (payload) => {
       mode: "payment",
       success_url: `${successUrl}${successUrl.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,
-      metadata: {
-        type: "ticket",
-        ticketId: tempTicketId,
-        eventId: eventId,
-        tierId: tierId,
-        quantity: quantity.toString(),
-        firstName: firstName,
-        lastName: lastName,
-        email: email,
-        address: address,
-        zipCode: zipCode,
-        city: city,
-        mobileNumber: mobileNumber,
-      },
+      metadata: metadata,
       expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 Minuten
       payment_intent_data: {
-        metadata: {
-          type: "ticket",
-          ticketId: tempTicketId,
-          eventId: eventId,
-        }
+        metadata: metadata // Metadaten auch an PaymentIntent übergeben für Webhook-Redundanz
       }
     };
     
@@ -153,7 +151,7 @@ export const handleStripeWebhook = async (event) => {
         await handleCheckoutCompleted(event.data.object);
         break;
       case "payment_intent.succeeded":
-        console.log("✓ Payment Intent erfolgreich:", event.data.object.id);
+        await handlePaymentIntentSucceeded(event.data.object);
         break;
       case "payment_intent.payment_failed":
         await handlePaymentFailed(event.data.object);
@@ -169,6 +167,35 @@ export const handleStripeWebhook = async (event) => {
   } catch (error) {
     console.error("Webhook-Fehler:", error);
     throw error;
+  }
+};
+
+/**
+ * Behandelt erfolgreiche Payment Intents (Backup für Checkout)
+ */
+const handlePaymentIntentSucceeded = async (paymentIntent) => {
+  const { metadata } = paymentIntent;
+  const db = getDatabase();
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Typ prüfen (Ticket vs Merch)
+    if (metadata.type === "ticket") {
+      await createTicketAfterPayment(metadata, paymentIntent.id, paymentIntent.amount / 100, connection);
+    } else if (metadata.type === "merch") {
+      await createMerchOrderAfterPayment(metadata, paymentIntent.id, paymentIntent.amount / 100, metadata.email, connection);
+    }
+
+    await connection.commit();
+    console.log(`✓ Payment Intent ${paymentIntent.id} erfolgreich verarbeitet`);
+  } catch (error) {
+    await connection.rollback();
+    console.error("Fehler beim Verarbeiten des Payment Intents:", error);
+    throw error;
+  } finally {
+    connection.release();
   }
 };
 
