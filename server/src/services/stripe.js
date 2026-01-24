@@ -351,7 +351,7 @@ const createMerchOrderAfterPayment = async (session, connection) => {
 
   // Produkt-Preis aus DB laden für korrekte Daten (vermeidet Shipping-Berechnungsfehler)
   const [productRows] = await connection.execute(
-    'SELECT price, stock FROM merch_products WHERE id = ?',
+    'SELECT price, stock FROM merch_products WHERE id = ? FOR UPDATE',
     [productId]
   );
   

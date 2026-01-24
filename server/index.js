@@ -167,9 +167,9 @@ const runMigrations = async () => {
       console.log("🔄 Checking database schema for missing columns...");
       
       // Prüfen ob 'address' Spalte in 'tickets' existiert
-      const [columns] = await connection.execute("SHOW COLUMNS FROM tickets LIKE 'address'");
+      const [ticketColumns] = await connection.execute("SHOW COLUMNS FROM tickets LIKE 'address'");
       
-      if (columns.length === 0) {
+      if (ticketColumns.length === 0) {
         console.log("⚠️ Missing columns detected in 'tickets'. Running migration...");
         await connection.execute(`
           ALTER TABLE tickets
@@ -179,9 +179,23 @@ const runMigrations = async () => {
           ADD COLUMN mobileNumber VARCHAR(50) AFTER city
         `);
         console.log("✅ Schema migration successful: Added address fields to tickets table.");
-      } else {
-        console.log("✅ Database schema is up to date.");
       }
+
+      // Prüfen ob 'zipCode' Spalte in 'merch_orders' existiert
+      const [merchColumns] = await connection.execute("SHOW COLUMNS FROM merch_orders LIKE 'zipCode'");
+      
+      if (merchColumns.length === 0) {
+        console.log("⚠️ Missing columns detected in 'merch_orders'. Running migration...");
+        await connection.execute(`
+          ALTER TABLE merch_orders
+          ADD COLUMN zipCode VARCHAR(20) AFTER address,
+          ADD COLUMN city VARCHAR(100) AFTER zipCode,
+          ADD COLUMN country VARCHAR(100) AFTER city
+        `);
+        console.log("✅ Schema migration successful: Added address fields to merch_orders table.");
+      }
+
+      console.log("✅ Database schema check complete.");
     } catch (err) {
       console.error("❌ Migration failed:", err.message);
     } finally {

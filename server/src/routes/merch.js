@@ -163,8 +163,7 @@ router.post('/products', protect, upload.array('images', 10), async (req, res) =
 
     // ⚡ CACHE INVALIDATION
     await redisClient.del('merch:products');
-    // Optional: Push an Clients, dass ein neues Produkt da ist
-    // getIO().emit('merch_list_update');
+    getIO().emit('merch_update', { type: 'create' });
 
     res.status(201).json({ id: result.insertId, message: 'Produkt erstellt', images: finalImages });
   } catch (error) {
@@ -229,6 +228,7 @@ router.delete('/products/:id', protect, async (req, res) => {
     // ⚡ CACHE INVALIDATION
     await redisClient.del('merch:products');
     await redisClient.del(`merch:product:${req.params.id}`);
+    getIO().emit('merch_update', { id: req.params.id, type: 'delete' });
 
     res.json({ message: 'Produkt gelöscht' });
   } catch (error) {
