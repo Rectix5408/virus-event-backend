@@ -53,6 +53,8 @@ export const apiLimiter = createLimiter({
   message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' }
 });
 
+export const rateLimit = apiLimiter;
+
 // Stricter Auth Rate Limiter
 export const authLimiter = createLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
