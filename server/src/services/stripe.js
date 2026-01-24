@@ -11,7 +11,9 @@ const stripeKey = process.env.STRIPE_SECRET_KEY;
 if (!stripeKey) {
   console.error("❌ CRITICAL: STRIPE_SECRET_KEY fehlt in den Umgebungsvariablen! Überprüfe die .env Datei.");
 }
-const stripe = new Stripe(stripeKey || 'sk_test_dummy_key_to_prevent_crash');
+const stripe = new Stripe(stripeKey || 'sk_test_dummy_key_to_prevent_crash', {
+  apiVersion: '2024-06-20',
+});
 
 /**
  * Erstellt eine Stripe Checkout Session (OHNE Ticket zu erstellen)
@@ -58,6 +60,7 @@ export const createCheckoutSession = async (payload) => {
       automatic_payment_methods: {
         enabled: true,
       },
+      billing_address_collection: 'required',
       line_items: [{
         price_data: {
           currency: "eur",
