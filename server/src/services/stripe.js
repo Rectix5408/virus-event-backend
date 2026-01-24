@@ -3,6 +3,8 @@ import { getDatabase } from "../config/database.js";
 import { sendTicketEmail } from "./email.js";
 import { generateTicketId } from "../utils/helpers.js";
 import QRCode from "qrcode";
+import { getIO } from "./socket.js";
+import redisClient from "../config/redis.js";
 
 // Sicherstellen, dass der Server nicht abstürzt, wenn der Key fehlt
 const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -270,6 +272,16 @@ const createTicketAfterPayment = async (session, connection) => {
     [JSON.stringify(ticketTiers), eventId]
   );
 
+  // ⚡ REALTIME UPDATE & CACHE INVALIDATION
+  try {
+    // 1. Cache für Events invalidieren (damit der nächste Fetch frisch ist)
+    await redisClient.del('events:all');
+    await redisClient.del(`event:${eventId}`);
+
+    // 2. Push an alle Clients: "Hey, für dieses Event hat sich der Stock geändert!"
+    getIO().emit('ticket_update', { eventId, tierId, remaining: selectedTier.amountTickets });
+  } catch (e) { console.error("Realtime update failed", e); }
+
   // Email mit Ticket versenden
   const eventDetails = {
     name: event.title,
@@ -386,6 +398,16 @@ const createMerchOrderAfterPayment = async (session, connection) => {
       'UPDATE merch_products SET stock = ? WHERE id = ?',
       [JSON.stringify(stock), productId]
     );
+
+    // ⚡ REALTIME UPDATE MERCH
+    try {
+      // Cache invalidieren
+      await redisClient.del('merch:products');
+      await redisClient.del(`merch:product:${productId}`);
+      
+      // Push Update
+      getIO().emit('merch_stock_update', { productId, size, remaining: stock[size] });
+    } catch (e) { console.error("Merch realtime update failed", e); }
   }
 
   console.log(`✓ Merch-Bestellung ${orderId} erfolgreich erstellt`);

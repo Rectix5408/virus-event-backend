@@ -7,6 +7,8 @@ import fs from 'fs';
 import Stripe from 'stripe';
 import { protect } from './auth.js';
 import { constructWebhookEvent, handleStripeWebhook } from '../services/stripe.js';
+import redisClient from '../config/redis.js';
+import { getIO } from '../services/socket.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -61,6 +63,12 @@ const parseImages = (data) => {
 // CRUD Routes (unverändert, ausgelassen für Kürze)
 router.get('/products', async (req, res) => {
   try {
+    // ⚡ CACHE CHECK
+    const cachedProducts = await redisClient.get('merch:products');
+    if (cachedProducts) {
+      return res.json(JSON.parse(cachedProducts));
+    }
+
     const pool = getDatabase();
     const [products] = await pool.query('SELECT * FROM merch_products ORDER BY created_at DESC');
     const parsedProducts = products.map(p => ({
@@ -70,6 +78,10 @@ router.get('/products', async (req, res) => {
       stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
       price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
     }));
+
+    // ⚡ CACHE SET (z.B. für 1 Stunde, aber wir invalidieren bei Updates eh manuell)
+    await redisClient.set('merch:products', JSON.stringify(parsedProducts), { EX: 3600 });
+
     res.json(parsedProducts);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -78,6 +90,12 @@ router.get('/products', async (req, res) => {
 
 router.get('/products/:id', async (req, res) => {
   try {
+    // ⚡ CACHE CHECK SINGLE PRODUCT
+    const cachedProduct = await redisClient.get(`merch:product:${req.params.id}`);
+    if (cachedProduct) {
+      return res.json(JSON.parse(cachedProduct));
+    }
+
     const pool = getDatabase();
     const [products] = await pool.query('SELECT * FROM merch_products WHERE id = ?', [req.params.id]);
     if (products.length === 0) return res.status(404).json({ message: 'Produkt nicht gefunden' });
@@ -89,6 +107,10 @@ router.get('/products/:id', async (req, res) => {
       stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
       price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
     };
+
+    // ⚡ CACHE SET
+    await redisClient.set(`merch:product:${req.params.id}`, JSON.stringify(parsedProduct), { EX: 3600 });
+
     res.json(parsedProduct);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -135,6 +157,11 @@ router.post('/products', protect, upload.array('images', 10), async (req, res) =
       [name, description, price, category, imagesJson, sizesJson, stockJson, isActive === undefined || isActive === 'true' || isActive === true ? 1 : 0]
     );
 
+    // ⚡ CACHE INVALIDATION
+    await redisClient.del('merch:products');
+    // Optional: Push an Clients, dass ein neues Produkt da ist
+    // getIO().emit('merch_list_update');
+
     res.status(201).json({ id: result.insertId, message: 'Produkt erstellt', images: finalImages });
   } catch (error) {
     console.error('Error creating product:', error);
@@ -178,6 +205,11 @@ router.put('/products/:id', protect, upload.array('images', 10), async (req, res
       [name, description, price, category, imagesJson, sizesJson, stockJson, isActive === 'true' || isActive === true ? 1 : 0, id]
     );
 
+    // ⚡ CACHE INVALIDATION
+    await redisClient.del('merch:products');
+    await redisClient.del(`merch:product:${id}`);
+    getIO().emit('merch_update', { id }); // Signalisiert Clients, neu zu laden
+
     res.json({ message: 'Produkt aktualisiert', images: finalImages });
   } catch (error) {
     console.error('Error updating product:', error);
@@ -189,6 +221,11 @@ router.delete('/products/:id', protect, async (req, res) => {
   try {
     const pool = getDatabase();
     await pool.query('DELETE FROM merch_products WHERE id = ?', [req.params.id]);
+    
+    // ⚡ CACHE INVALIDATION
+    await redisClient.del('merch:products');
+    await redisClient.del(`merch:product:${req.params.id}`);
+
     res.json({ message: 'Produkt gelöscht' });
   } catch (error) {
     res.status(500).json({ error: error.message });
