@@ -111,7 +111,7 @@ router.delete('/:entity/:filename', protect, (req, res) => {
   fs.unlink(filePath, (err) => {
     if (err) {
       if (err.code === 'ENOENT') {
-        return res.status(404).json({ message: 'Datei nicht gefunden.' });
+        return res.status(200).json({ message: 'Datei war bereits gelöscht.' });
       }
       return res.status(500).json({ message: 'Fehler beim Löschen der Datei.' });
     }
