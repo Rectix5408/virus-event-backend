@@ -471,7 +471,7 @@ export const createMerchOrderAfterPayment = async (metadata, paymentId, amountTo
 
   // Bestellung speichern
   await connection.execute(
-    `INSERT INTO merch_orders (orderId, email, firstName, lastName, address, zipCode, city, country, items, totalAmount, paymentIntentId, status, createdAt)
+    `INSERT INTO merch_orders (orderId, email, firstName, lastName, address, zipCode, city, country, items, totalAmount, paymentIntentId, status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
     [
       orderId,
