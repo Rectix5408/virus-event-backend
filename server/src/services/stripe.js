@@ -241,6 +241,14 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
     return;
   }
 
+  // ZUSÄTZLICHER CHECK: Prüfen ob Ticket-ID (Primary Key) bereits existiert
+  // Dies fängt Fälle ab, wo paymentIntentId Check aufgrund von Race-Conditions noch leer war
+  const [existingById] = await connection.execute("SELECT id FROM tickets WHERE id = ?", [ticketId]);
+  if (existingById.length > 0) {
+    console.log(`✓ Ticket ${ticketId} existiert bereits (ID Check).`);
+    return;
+  }
+
   // Event-Details laden und sperren für Update
   const [eventRows] = await connection.execute(
     "SELECT * FROM events WHERE id = ? FOR UPDATE",
@@ -292,26 +300,36 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   });
 
   // Ticket in Datenbank speichern
-  await connection.execute(
-    `INSERT INTO tickets (id, email, firstName, lastName, address, zipCode, city, mobileNumber, tierId, tierName, eventId, quantity, qrCode, paymentIntentId, status, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
-    [
-      ticketId,
-      email,
-      firstName,
-      lastName,
-      address,
-      zipCode,
-      city,
-      mobileNumber,
-      tierId,
-      selectedTier.name,
-      eventId,
-      parseInt(quantity),
-      qrCodeImage,
-      paymentId
-    ]
-  );
+  try {
+    await connection.execute(
+      `INSERT INTO tickets (id, email, firstName, lastName, address, zipCode, city, mobileNumber, tierId, tierName, eventId, quantity, qrCode, paymentIntentId, status, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
+      [
+        ticketId,
+        email,
+        firstName,
+        lastName,
+        address,
+        zipCode,
+        city,
+        mobileNumber,
+        tierId,
+        selectedTier.name,
+        eventId,
+        parseInt(quantity),
+        qrCodeImage,
+        paymentId
+      ]
+    );
+  } catch (err) {
+    // Wenn der Fehler "Duplicate entry" (Code 1062) ist, war ein anderer Prozess schneller.
+    // Das ist kein echter Fehler, sondern ein erfolgreiches "bereits erledigt".
+    if (err.code === 'ER_DUP_ENTRY') {
+      console.log(`✓ Race-Condition abgefangen: Ticket ${ticketId} wurde gerade parallel erstellt.`);
+      return; // Abbrechen, damit Stock nicht doppelt reduziert wird und keine doppelte Email rausgeht
+    }
+    throw err; // Andere Fehler weiterwerfen
+  }
 
   // Ticket abziehen (Stock reduzieren)
   selectedTier.amountTickets = Math.max(0, selectedTier.amountTickets - parseInt(quantity));
