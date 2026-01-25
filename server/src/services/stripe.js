@@ -211,7 +211,7 @@ const handleCheckoutCompleted = async (session) => {
     if (metadata.type === "ticket") {
       await createTicketAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, connection);
     } else if (metadata.type === "merch") {
-      await createMerchOrderAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, session.customer_email, connection);
+      await createMerchOrderAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, session.metadata.email, connection);
     }
 
     await connection.commit();
@@ -515,6 +515,14 @@ export const constructWebhookEvent = (body, signature, webhookSecret) => {
   try {
     if (!webhookSecret) {
       throw new Error("Webhook Secret fehlt in Umgebungsvariablen");
+    }
+
+    // Sicherheitscheck: Wurde der Body bereits von express.json() geparst?
+    if (body && !Buffer.isBuffer(body) && typeof body !== 'string') {
+      throw new Error(
+        "Webhook-Fehler: Request Body ist bereits ein Objekt (geparst). " +
+        "Die Webhook-Route muss express.raw() verwenden und VOR globalen Body-Parser-Middlewares registriert sein."
+      );
     }
 
     const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);

@@ -6,7 +6,6 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import Stripe from 'stripe';
 import { protect } from './auth.js';
-import { constructWebhookEvent, handleStripeWebhook } from '../services/stripe.js';
 import redisClient from '../config/redis.js';
 import { getIO } from '../services/socket.js';
 import { rateLimit } from '../middleware/rateLimiter.js';
@@ -355,23 +354,6 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
   } catch (error) {
     console.error('Fehler beim Erstellen der Checkout-Session:', error);
     res.status(500).json({ error: 'Fehler beim Erstellen der Checkout-Session' });
-  }
-});
-
-// WEBHOOK - Bestellung wird HIER erstellt nach erfolgreicher Zahlung
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  try {
-    const sig = req.headers['stripe-signature'];
-    // Nutze den zentralen Service für Verifizierung und Handling
-    // WICHTIG: Wir nutzen hier das Merch-Secret!
-    const event = constructWebhookEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET_MERCH);
-    
-    await handleStripeWebhook(event);
-    
-    res.json({ received: true });
-  } catch (err) {
-    console.error('❌ Webhook Error:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 });
 
