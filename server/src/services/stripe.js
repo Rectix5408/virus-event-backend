@@ -155,7 +155,8 @@ export const verifyCheckoutSession = async (sessionId) => {
       eventId: session.metadata?.eventId,
       ticketId: session.metadata?.ticketId,
       email: session.customer_details?.email || session.metadata?.email,
-      paymentIntentId: session.payment_intent
+      paymentIntentId: session.payment_intent,
+      metadata: session.metadata
     };
   } catch (error) {
     console.error("Fehler bei Session-Verifizierung:", error);

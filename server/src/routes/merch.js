@@ -327,7 +327,7 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
         quantity: parseInt(quantity),
       }],
       mode: 'payment',
-      success_url: `${successUrl}${successUrl.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}`,
+      success_url: finalSuccessUrl,
       cancel_url: cancelUrl,
       customer_email: email,
       metadata: {
