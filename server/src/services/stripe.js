@@ -237,7 +237,8 @@ const handleCheckoutCompleted = async (session) => {
     if (metadata.type === "ticket") {
       await createTicketAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, connection);
     } else if (metadata.type === "merch") {
-      await createMerchOrderAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, session.metadata.email, connection);
+      const email = session.metadata.email || session.customer_details?.email || session.customer_email;
+      await createMerchOrderAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, email, connection);
     }
 
     await connection.commit();
@@ -470,17 +471,17 @@ export const createMerchOrderAfterPayment = async (metadata, paymentId, amountTo
 
   // Bestellung speichern
   await connection.execute(
-    `INSERT INTO merch_orders (orderId, email, firstName, lastName, address, zipCode, city, country, items, totalAmount, paymentIntentId, status, created_at)
+    `INSERT INTO merch_orders (orderId, email, firstName, lastName, address, zipCode, city, country, items, totalAmount, paymentIntentId, status, createdAt)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
     [
       orderId,
-      customerEmail,
-      firstName,
-      lastName,
-      fullAddress, // Speichert jetzt Straße + Hausnummer
-      zip,
-      city,
-      country,
+      customerEmail || "",
+      firstName || "",
+      lastName || "",
+      fullAddress || "",
+      zip || "",
+      city || "",
+      country || "",
       JSON.stringify(items),
       amountTotal,
       paymentId

@@ -343,6 +343,7 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
         quantity: quantity.toString(),
         firstName,
         lastName,
+        email,
         address: JSON.stringify(addressData),
         price: price.toString()
       },
