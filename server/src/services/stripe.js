@@ -381,6 +381,10 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
     // 1. Cache für Events invalidieren (damit der nächste Fetch frisch ist)
     await redisClient.del('events:all');
     await redisClient.del(`event:${eventId}`);
+    
+    // Admin-Listen invalidieren (Wildcard-Löschung wäre hier ideal, 
+    // aber wir löschen zumindest den Haupt-Key falls vorhanden)
+    // await redisClient.del('admin:tickets:list'); 
 
     // 2. Push an alle Clients: "Hey, für dieses Event hat sich der Stock geändert!"
     getIO().emit('ticket_update', { eventId, tierId, remaining: selectedTier.amountTickets });
