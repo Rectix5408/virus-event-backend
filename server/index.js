@@ -14,10 +14,12 @@ import merchRouter from './src/routes/merch.js';
 import uploadRouter from './src/routes/upload.js';
 import paymentRoutes from './src/routes/payment.js';
 import webhookRouter from './src/routes/webhook.js';
+import adminRoutes from './src/routes/admin.js';
 import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
 import { initSocket } from "./src/services/socket.js";
 import { rateLimit } from "./src/middleware/rateLimiter.js";
+
 
 // Pfad Setup
 const __filename = fileURLToPath(import.meta.url);
@@ -131,6 +133,7 @@ app.use('/api/merch', merchRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/webhooks/stripe', webhookRouter);
+app.use('/api/admin', adminRoutes); 
 
 // --- Frontend Build Integration ---
 const frontendDist = path.join(__dirname, "../../virus-event-frontend/dist");
