@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { getDatabase, initializeDatabase } from "../config/database.js";
 import redisClient from "../config/redis.js";
 
