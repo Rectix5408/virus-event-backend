@@ -311,6 +311,11 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
       console.warn('Fehler beim Parsen der Bilder für Stripe:', e);
     }
 
+    // URL bereinigen: Verhindert doppelte session_id Parameter
+    const finalSuccessUrl = successUrl.includes('session_id={CHECKOUT_SESSION_ID}')
+      ? successUrl
+      : `${successUrl}${successUrl.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}`;
+
     // Stripe Session erstellen (OHNE Bestellung zu speichern)
     const session = await stripe.checkout.sessions.create({
       billing_address_collection: 'required',
