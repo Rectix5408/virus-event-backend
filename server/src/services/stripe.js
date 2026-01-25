@@ -139,6 +139,31 @@ export const createCheckoutSession = async (payload) => {
 };
 
 /**
+ * Verifiziert eine Stripe Session ID und gibt Status zurück
+ */
+export const verifyCheckoutSession = async (sessionId) => {
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    
+    if (!session) {
+      throw new Error("Session nicht gefunden");
+    }
+
+    return {
+      success: session.payment_status === 'paid',
+      status: session.payment_status,
+      eventId: session.metadata?.eventId,
+      ticketId: session.metadata?.ticketId,
+      email: session.customer_details?.email || session.metadata?.email,
+      paymentIntentId: session.payment_intent
+    };
+  } catch (error) {
+    console.error("Fehler bei Session-Verifizierung:", error);
+    throw error;
+  }
+};
+
+/**
  * Webhook Handler - Hier wird das Ticket ERST nach erfolgreicher Zahlung erstellt
  */
 export const handleStripeWebhook = async (event) => {
