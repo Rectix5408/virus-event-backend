@@ -1,8 +1,12 @@
-import { getDatabase } from "../config/database.js";
+import { getDatabase, initializeDatabase } from "../config/database.js";
 import redisClient from "../config/redis.js";
 
 const fixDatabase = async () => {
   console.log("🔧 Starte Datenbank-Bereinigung für 'Sold Out' Problem...");
+  
+  // Datenbank initialisieren, da dies ein Standalone-Script ist
+  await initializeDatabase();
+  
   const db = getDatabase();
   
   try {
