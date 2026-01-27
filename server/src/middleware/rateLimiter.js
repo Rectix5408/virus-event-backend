@@ -96,3 +96,5 @@ export const socketRateLimit = (socket, next) => {
 
   next();
 };
+
+export const rateLimitMiddleware = apiLimiter;
