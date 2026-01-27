@@ -1,59 +1,38 @@
-import redis from '../config/redis.js';
+import NodeCache from "node-cache";
 
-export const TTL_DEFAULT = 60; // 60 Sekunden Standard-Cache
-export const TTL_LONG = 300;   // 5 Minuten für selten geänderte Daten
+// Standard TTL: 5 Minuten, Check-Period: 1 Minute
+const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
 export const KEYS = {
-  EVENTS_ALL: 'events:all',
-  EVENT_DETAIL: (id) => `event:${id}`,
-  MERCH_ALL: 'merch:products',
-  MERCH_DETAIL: (id) => `merch:product:${id}`,
+  // Wir nutzen hier die URLs als Keys, damit die Middleware sie automatisch findet
+  EVENTS_ALL: "/api/events",
+  EVENT_DETAIL: (id) => `/api/events/${id}`,
+  MERCH_ALL: "/api/merch/products",
+  MERCH_DETAIL: (id) => `/api/merch/products/${id}`,
 };
 
-/**
- * Holt Daten aus dem Cache oder führt die fetchFunction aus und cached das Ergebnis.
- * Pattern: Cache-Aside
- */
-export const getOrSet = async (key, fetchFunction, ttl = TTL_DEFAULT) => {
-  try {
-    const cachedData = await redis.get(key);
-    if (cachedData) {
-      return JSON.parse(cachedData);
-    }
-  } catch (err) {
-    console.error(`❌ Redis Get Error (${key}):`, err);
-    // Bei Redis-Fehler nicht abbrechen, sondern Fallback auf DB
-  }
-
-  // Daten aus DB holen (fetchFunction)
-  const data = await fetchFunction();
-
-  if (data) {
-    try {
-      // Daten im Cache speichern
-      await redis.set(key, JSON.stringify(data), 'EX', ttl);
-    } catch (err) {
-      console.error(`❌ Redis Set Error (${key}):`, err);
-    }
-  }
-
-  return data;
+export const get = (key) => {
+  return cache.get(key);
 };
 
-/**
- * Löscht Cache Keys (Invalidierung)
- * Akzeptiert einen einzelnen Key (String) oder ein Array von Keys.
- */
-export const invalidate = async (keys) => {
+export const set = (key, value, ttl) => {
+  cache.set(key, value, ttl);
+};
+
+export const invalidate = (keys) => {
   if (!keys) return;
-  const keysToArray = Array.isArray(keys) ? keys : [keys];
   
-  try {
-    if (keysToArray.length > 0) {
-      await redis.del(...keysToArray);
-      console.log(`🗑️ Cache Invalidated: ${keysToArray.join(', ')}`);
-    }
-  } catch (err) {
-    console.error('❌ Redis Invalidate Error:', err);
-  }
+  const keysArray = Array.isArray(keys) ? keys : [keys];
+  
+  // Löscht exakte Matches
+  cache.del(keysArray);
+  
+  console.log(`[Cache] Invalidated: ${keysArray.join(', ')}`);
+};
+
+export default {
+  get,
+  set,
+  invalidate,
+  KEYS
 };
