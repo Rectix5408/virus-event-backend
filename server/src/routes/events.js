@@ -2,6 +2,9 @@ import express from 'express';
 import { getDatabase } from '../config/database.js';
 import { protect } from './auth.js';
 import { getEventStats } from '../services/ticket.js';
+import { cache, invalidateCache } from '../middleware/cache.js';
+import { getIO } from '../services/socket.js';
+import { rateLimitMiddleware } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -22,7 +25,7 @@ router.get('/meta', async (req, res) => {
 });
 
 // GET: Alle Events laden
-router.get('/', async (req, res) => {
+router.get('/', rateLimitMiddleware, cache('events:all', 60), async (req, res) => {
   try {
     const pool = getDatabase();
     const [rows] = await pool.query('SELECT * FROM events ORDER BY dateISO ASC');
@@ -34,7 +37,9 @@ router.get('/', async (req, res) => {
         try {
           ticketTiers = JSON.parse(event.ticketTiers).map(tier => ({
             ...tier,
-            isSoldOut: tier.availableQuantity <= 0,
+            // Fallback-Logik für Migration: amountTickets > availableQuantity > totalQuantity
+            amountTickets: tier.amountTickets ?? tier.availableQuantity ?? tier.totalQuantity ?? 0,
+            isSoldOut: (tier.amountTickets ?? tier.availableQuantity ?? 0) <= 0,
           }));
         } catch (e) {
           console.error(`Failed to parse ticketTiers for event ${event.id}`, e);
@@ -91,6 +96,11 @@ router.post('/', protect, async (req, res) => {
     ];
 
     await pool.query(query, values);
+    
+    // Cache Invalidierung & Realtime Update
+    await invalidateCache('events:all');
+    getIO().emit('events_update', { type: 'create' });
+
     res.json({ success: true, message: 'Event created' });
   } catch (error) {
     console.error(error);
@@ -159,6 +169,10 @@ router.put('/:id', protect, async (req, res) => {
     await connection.commit();
     connection.release();
 
+    // Cache Invalidierung & Realtime Update
+    await invalidateCache(['events:all', `event:${id}`]);
+    getIO().emit('events_update', { type: 'update', id });
+
     res.json({ success: true, message: 'Event updated successfully' });
 
   } catch (error) {
@@ -172,6 +186,11 @@ router.delete('/:id', protect, async (req, res) => {
   try {
     const pool = getDatabase();
     await pool.query('DELETE FROM events WHERE id = ?', [req.params.id]);
+    
+    // Cache Invalidierung & Realtime Update
+    await invalidateCache(['events:all', `event:${req.params.id}`]);
+    getIO().emit('events_update', { type: 'delete', id: req.params.id });
+
     res.json({ success: true, message: 'Event deleted' });
   } catch (error) {
     console.error(error);

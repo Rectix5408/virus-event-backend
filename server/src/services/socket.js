@@ -33,3 +33,13 @@ export const getIO = () => {
   }
   return io;
 };
+
+export const emitEvent = (event, data) => {
+  try {
+    const socketIo = getIO();
+    socketIo.emit(event, data);
+    console.log(`📡 Socket Event emitted: ${event}`, data);
+  } catch (error) {
+    console.error(`❌ Error emitting socket event ${event}:`, error.message);
+  }
+};

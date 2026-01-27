@@ -3,8 +3,8 @@ import { getDatabase } from "../config/database.js";
 import { sendTicketEmail } from "./email.js";
 import { generateTicketId } from "../utils/helpers.js";
 import QRCode from "qrcode";
-import { getIO } from "./socket.js";
-import redisClient from "../config/redis.js";
+import { emitEvent } from "./socket.js";
+import * as cacheService from "./cache.js";
 
 // Sicherstellen, dass der Server nicht abstürzt, wenn der Key fehlt
 const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -42,12 +42,8 @@ export const createCheckoutSession = async (payload) => {
       throw new Error(`Ungültige Ticketart: ${tierId}`);
     }
 
-    // Verfügbarkeit prüfen (amountTickets ist der einzige Bestandswert)
-    // Fallback auf alte Felder für Migration
-    const currentStock = selectedTier.amountTickets !== undefined 
-      ? selectedTier.amountTickets 
-      : (selectedTier.availableQuantity !== undefined ? selectedTier.availableQuantity : selectedTier.totalQuantity);
-
+    // Verfügbarkeit prüfen: Nur 'amountTickets' wird als Wahrheitsquelle verwendet.
+    const currentStock = selectedTier.amountTickets ?? 0;
     if (quantity > currentStock) {
       throw new Error(`Nicht genügend Tickets verfügbar. Nur noch ${currentStock} verfügbar.`);
     }
@@ -297,16 +293,10 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
     throw new Error(`Ticketart nicht gefunden: ${tierId}`);
   }
 
-  // Migration: Fallback auf amountTickets
-  if (selectedTier.amountTickets === undefined) {
-    selectedTier.amountTickets = selectedTier.availableQuantity !== undefined 
-      ? selectedTier.availableQuantity 
-      : selectedTier.totalQuantity;
-  }
-
   // Finale Verfügbarkeitsprüfung (Stock prüfen)
-  if (parseInt(quantity) > selectedTier.amountTickets) {
-    throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${selectedTier.amountTickets} verfügbar.`);
+  const currentStock = selectedTier.amountTickets ?? 0;
+  if (parseInt(quantity) > currentStock) {
+    throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${currentStock} verfügbar.`);
   }
 
   // QR-Code generieren
@@ -359,7 +349,7 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   }
 
   // Ticket abziehen (Stock reduzieren)
-  selectedTier.amountTickets = Math.max(0, selectedTier.amountTickets - parseInt(quantity));
+  selectedTier.amountTickets = Math.max(0, currentStock - parseInt(quantity));
 
   // Alte Felder entfernen, um Datenbank sauber zu halten
   delete selectedTier.availableQuantity;
@@ -379,15 +369,17 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   // ⚡ REALTIME UPDATE & CACHE INVALIDATION
   try {
     // 1. Cache für Events invalidieren (damit der nächste Fetch frisch ist)
-    await redisClient.del('events:all');
-    await redisClient.del(`event:${eventId}`);
+    await cacheService.invalidate([
+      cacheService.KEYS.EVENTS_ALL, 
+      cacheService.KEYS.EVENT_DETAIL(eventId)
+    ]);
     
     // Admin-Listen invalidieren (Wildcard-Löschung wäre hier ideal, 
     // aber wir löschen zumindest den Haupt-Key falls vorhanden)
-    // await redisClient.del('admin:tickets:list'); 
+    // await cacheService.invalidate('admin:tickets:list'); 
 
     // 2. Push an alle Clients: "Hey, für dieses Event hat sich der Stock geändert!"
-    getIO().emit('ticket_update', { eventId, tierId, remaining: selectedTier.amountTickets });
+    emitEvent('ticket_update', { eventId, tierId, remaining: selectedTier.amountTickets });
   } catch (e) { console.error("Realtime update failed", e); }
 
   // Email mit Ticket versenden
@@ -510,11 +502,13 @@ export const createMerchOrderAfterPayment = async (metadata, paymentId, amountTo
     // ⚡ REALTIME UPDATE MERCH
     try {
       // Cache invalidieren
-      await redisClient.del('merch:products');
-      await redisClient.del(`merch:product:${productId}`);
+      await cacheService.invalidate([
+        cacheService.KEYS.MERCH_ALL, 
+        cacheService.KEYS.MERCH_DETAIL(productId)
+      ]);
       
       // Push Update
-      getIO().emit('merch_stock_update', { productId, size, remaining: stock[size] });
+      emitEvent('merch_stock_update', { productId, size, remaining: stock[size] });
     } catch (e) { console.error("Merch realtime update failed", e); }
   }
 

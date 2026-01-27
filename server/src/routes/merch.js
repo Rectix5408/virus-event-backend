@@ -9,6 +9,7 @@ import { protect } from './auth.js';
 import redisClient from '../config/redis.js';
 import { getIO } from '../services/socket.js';
 import { rateLimit } from '../middleware/rateLimiter.js';
+import { cache, invalidateCache } from '../middleware/cache.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2024-06-20',
@@ -19,7 +20,7 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-// Multer Setup (unverändert)
+// Multer Setup (unverÃ¤ndert)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadPath = path.join(__dirname, '../../uploads/merch');
@@ -57,23 +58,16 @@ const parseImages = (data) => {
     const parsed = JSON.parse(data);
     return Array.isArray(parsed) ? parsed : [parsed];
   } catch (e) {
-    // Falls es kein gültiges JSON ist, aber ein String (z.B. alter Pfad), geben wir es als Array zurück
+    // Falls es kein gÃ¼ltiges JSON ist, aber ein String (z.B. alter Pfad), geben wir es als Array zurÃ¼ck
     return typeof data === 'string' ? [data] : [];
   }
 };
 
-// CRUD Routes (unverändert, ausgelassen für Kürze)
-router.get('/products', async (req, res) => {
+// CRUD Routes (unverÃ¤ndert, ausgelassen fÃ¼r KÃ¼rze)
+router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merch:products', 60), async (req, res) => {
   try {
-    // ⚡ HTTP CACHE: Browser soll das Ergebnis für 60 Sekunden cachen
+    // âš¡ HTTP CACHE: Browser soll das Ergebnis fÃ¼r 60 Sekunden cachen
     res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
-
-    // ⚡ CACHE CHECK
-    const cachedProducts = await redisClient.get('merch:products');
-    if (cachedProducts) {
-      console.log('⚡ CACHE HIT: Merch Products (aus Redis geladen)');
-      return res.json(JSON.parse(cachedProducts));
-    }
 
     const pool = getDatabase();
     const [products] = await pool.query('SELECT * FROM merch_products ORDER BY created_at DESC');
@@ -85,25 +79,14 @@ router.get('/products', async (req, res) => {
       price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
     }));
 
-    // ⚡ CACHE SET (z.B. für 1 Stunde, aber wir invalidieren bei Updates eh manuell)
-    await redisClient.set('merch:products', JSON.stringify(parsedProducts), { EX: 3600 });
-    console.log('💾 DB FETCH: Merch Products (aus MySQL geladen & gecached)');
-
     res.json(parsedProducts);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get('/products/:id', async (req, res) => {
+router.get('/products/:id', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache((req) => `merch:product:${req.params.id}`, 60), async (req, res) => {
   try {
-    // ⚡ CACHE CHECK SINGLE PRODUCT
-    const cachedProduct = await redisClient.get(`merch:product:${req.params.id}`);
-    if (cachedProduct) {
-      console.log(`⚡ CACHE HIT: Product ${req.params.id}`);
-      return res.json(JSON.parse(cachedProduct));
-    }
-
     const pool = getDatabase();
     const [products] = await pool.query('SELECT * FROM merch_products WHERE id = ?', [req.params.id]);
     if (products.length === 0) return res.status(404).json({ message: 'Produkt nicht gefunden' });
@@ -115,10 +98,6 @@ router.get('/products/:id', async (req, res) => {
       stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
       price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
     };
-
-    // ⚡ CACHE SET
-    await redisClient.set(`merch:product:${req.params.id}`, JSON.stringify(parsedProduct), { EX: 3600 });
-    console.log(`💾 DB FETCH: Product ${req.params.id}`);
 
     res.json(parsedProduct);
   } catch (error) {
@@ -166,8 +145,8 @@ router.post('/products', protect, upload.array('images', 10), async (req, res) =
       [name, description, price, category, imagesJson, sizesJson, stockJson, isActive === undefined || isActive === 'true' || isActive === true ? 1 : 0]
     );
 
-    // ⚡ CACHE INVALIDATION
-    await redisClient.del('merch:products');
+    // âš¡ CACHE INVALIDATION
+    await invalidateCache('merch:products');
     getIO().emit('merch_update', { type: 'create' });
 
     res.status(201).json({ id: result.insertId, message: 'Produkt erstellt', images: finalImages });
@@ -213,9 +192,8 @@ router.put('/products/:id', protect, upload.array('images', 10), async (req, res
       [name, description, price, category, imagesJson, sizesJson, stockJson, isActive === 'true' || isActive === true ? 1 : 0, id]
     );
 
-    // ⚡ CACHE INVALIDATION
-    await redisClient.del('merch:products');
-    await redisClient.del(`merch:product:${id}`);
+    // âš¡ CACHE INVALIDATION
+    await invalidateCache(['merch:products', `merch:product:${id}`]);
     getIO().emit('merch_update', { id }); // Signalisiert Clients, neu zu laden
 
     res.json({ message: 'Produkt aktualisiert', images: finalImages });
@@ -230,12 +208,11 @@ router.delete('/products/:id', protect, async (req, res) => {
     const pool = getDatabase();
     await pool.query('DELETE FROM merch_products WHERE id = ?', [req.params.id]);
     
-    // ⚡ CACHE INVALIDATION
-    await redisClient.del('merch:products');
-    await redisClient.del(`merch:product:${req.params.id}`);
+    // âš¡ CACHE INVALIDATION
+    await invalidateCache(['merch:products', `merch:product:${req.params.id}`]);
     getIO().emit('merch_update', { id: req.params.id, type: 'delete' });
 
-    res.json({ message: 'Produkt gelöscht' });
+    res.json({ message: 'Produkt gelÃ¶scht' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -247,7 +224,7 @@ router.post('/upload', protect, upload.single('image'), async (req, res) => {
 });
 
 // SICHERE CHECKOUT SESSION (keine Bestellung erstellen)
-// 🛡️ SECURITY: Strenges Rate Limiting für Checkout (10 Versuche pro 15 Min)
+// ðŸ›¡ï¸ SECURITY: Strenges Rate Limiting fÃ¼r Checkout (10 Versuche pro 15 Min)
 // Verhindert Stripe-API-Kosten und DB-Spam
 router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'checkout' }), async (req, res) => {
   try {
@@ -258,7 +235,7 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
       return res.status(400).json({ error: 'Fehlende erforderliche Felder' });
     }
 
-    // Produkt und Verfügbarkeit prüfen
+    // Produkt und VerfÃ¼gbarkeit prÃ¼fen
     const pool = getDatabase();
     const [products] = await pool.query(
       'SELECT * FROM merch_products WHERE id = ?',
@@ -270,7 +247,7 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
     }
 
     if (!products[0].isActive) {
-      return res.status(400).json({ error: 'Produkt ist derzeit nicht verfügbar (inaktiv)' });
+      return res.status(400).json({ error: 'Produkt ist derzeit nicht verfÃ¼gbar (inaktiv)' });
     }
 
     const product = products[0];
@@ -285,11 +262,11 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
 
     if (!stock || !stock[size] || stock[size] < quantity) {
       return res.status(400).json({ 
-        error: `Nicht genügend Artikel in Größe ${size} verfügbar. Nur noch ${stock?.[size] || 0} auf Lager.` 
+        error: `Nicht genÃ¼gend Artikel in GrÃ¶ÃŸe ${size} verfÃ¼gbar. Nur noch ${stock?.[size] || 0} auf Lager.` 
       });
     }
 
-    // Adresse für Metadata vorbereiten (analog zu Tickets)
+    // Adresse fÃ¼r Metadata vorbereiten (analog zu Tickets)
     let addressData = address;
     if (typeof address === 'string') {
       addressData = {
@@ -299,16 +276,16 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
       };
     }
 
-    // Bilder für Stripe vorbereiten (müssen absolute URLs sein)
+    // Bilder fÃ¼r Stripe vorbereiten (mÃ¼ssen absolute URLs sein)
     let stripeImages = [];
     try {
       const rawImages = typeof product.images === 'string' ? JSON.parse(product.images) : (product.images || []);
       if (Array.isArray(rawImages) && rawImages.length > 0) {
-        const baseUrl = 'https://api.virus-event.de'; // Backend URL für Uploads
+        const baseUrl = 'https://api.virus-event.de'; // Backend URL fÃ¼r Uploads
         stripeImages = rawImages.slice(0, 1).map(img => img.startsWith('http') ? img : `${baseUrl}${img.startsWith('/') ? '' : '/'}${img}`);
       }
     } catch (e) {
-      console.warn('Fehler beim Parsen der Bilder für Stripe:', e);
+      console.warn('Fehler beim Parsen der Bilder fÃ¼r Stripe:', e);
     }
 
     // URL bereinigen: Verhindert doppelte session_id Parameter
@@ -323,7 +300,7 @@ router.post('/create-checkout-session', rateLimit({ windowMs: 15 * 60 * 1000, ma
         price_data: {
           currency: 'eur',
           product_data: {
-            name: `${productName} - Größe ${size}`,
+            name: `${productName} - GrÃ¶ÃŸe ${size}`,
             description: `Menge: ${quantity}`,
             images: stripeImages,
           },
