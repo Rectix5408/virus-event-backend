@@ -1,10 +1,10 @@
-import { get, set } from "../services/cache.js";
+import { get, set, invalidate } from "../services/cache.js";
 
 /**
  * Caching Middleware
  * @param {number} duration - Cache duration in seconds
  */
-export const cacheMiddleware = (duration = 300) => {
+export const cache = (duration = 300) => {
   return (req, res, next) => {
     // Nur GET-Requests cachen
     if (req.method !== 'GET') {
@@ -31,4 +31,6 @@ export const cacheMiddleware = (duration = 300) => {
   };
 };
 
-export default cacheMiddleware;
+export const invalidateCache = invalidate;
+
+export default cache;
