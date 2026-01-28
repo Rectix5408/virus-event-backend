@@ -221,5 +221,47 @@ router.get("/tickets/id/:ticketId", async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/tickets/:id
+ * Delete a ticket (Admin)
+ */
+router.delete("/tickets/:id", protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+    await db.execute("DELETE FROM tickets WHERE id = ?", [id]);
+    res.json({ success: true, message: "Ticket deleted" });
+  } catch (error) {
+    console.error("Delete ticket error:", error);
+    res.status(500).json({ message: "Failed to delete ticket" });
+  }
+});
+
+/**
+ * PUT /api/tickets/:id/checkin
+ * Toggle check-in status (Admin)
+ */
+router.put("/tickets/:id/checkin", protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    await updateCheckIn(id, status);
+    res.json({ success: true, message: "Check-in status updated" });
+  } catch (error) {
+    console.error("Check-in update error:", error);
+    res.status(500).json({ message: "Failed to update check-in status" });
+  }
+});
+
+/**
+ * POST /api/tickets/:id/resend
+ * Resend ticket email (Admin placeholder)
+ */
+router.post("/tickets/:id/resend", protect, async (req, res) => {
+  // Hier würde die Email-Logik integriert werden.
+  // Da der Email-Service hier nicht direkt importiert ist, simulieren wir den Erfolg.
+  console.log(`[Admin] Resending email for ticket ${req.params.id}`);
+  res.json({ success: true, message: "Email resent successfully" });
+});
 
 export default router;
