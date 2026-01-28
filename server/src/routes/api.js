@@ -332,6 +332,7 @@ router.post("/contact", async (req, res) => {
         email VARCHAR(255),
         subject VARCHAR(255),
         message TEXT,
+        reply_message TEXT,
         status VARCHAR(50) DEFAULT 'open',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -364,6 +365,7 @@ router.get("/admin/contact", protect, async (req, res) => {
         email VARCHAR(255),
         subject VARCHAR(255),
         message TEXT,
+        reply_message TEXT,
         status VARCHAR(50) DEFAULT 'open',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -410,7 +412,14 @@ router.post("/admin/contact/:id/reply", protect, async (req, res) => {
     // Da wir keinen direkten Zugriff auf den Email-Service haben, simulieren wir den Versand.
     console.log(`📧 [Mock Email] To: ${request.email}, Subject: ${subject}, Body: ${replyMessage}`);
 
-    await db.execute("UPDATE contact_requests SET status = 'replied' WHERE id = ?", [id]);
+    // Auto-Migration: Spalte hinzufügen falls sie fehlt (für bestehende Installationen)
+    try {
+      await db.execute("ALTER TABLE contact_requests ADD COLUMN reply_message TEXT");
+    } catch (e) {
+      // Fehler ignorieren, wenn Spalte schon existiert
+    }
+
+    await db.execute("UPDATE contact_requests SET status = 'replied', reply_message = ? WHERE id = ?", [replyMessage, id]);
 
     res.json({ success: true, message: "Reply sent" });
   } catch (error) {
