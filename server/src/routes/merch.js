@@ -7,7 +7,7 @@ import fs from 'fs';
 import Stripe from 'stripe';
 import { protect } from './auth.js';
 import redisClient from '../config/redis.js';
-import { getIO } from '../services/socket.js';
+import { emitEvent } from '../services/socket.js';
 import { rateLimit } from '../middleware/rateLimiter.js';
 import { cache, invalidateCache } from '../middleware/cache.js';
 
@@ -76,10 +76,10 @@ const safeJsonParse = (data, fallback) => {
 };
 
 // CRUD Routes (unverÃ¤ndert, ausgelassen fÃ¼r KÃ¼rze)
-router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merch:products', 5), async (req, res) => {
+router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merch:products', 600), async (req, res) => {
   try {
-    // ⚡ HTTP CACHE: Cache-Zeit auf 10s reduziert, damit Änderungen schneller sichtbar sind
-    res.set('Cache-Control', 'public, max-age=10, stale-while-revalidate=10');
+    // ⚡ HTTP CACHE: 30s Browser Cache, 10min Redis Cache (Invalidation via Socket)
+    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=30');
     console.log('📦 [Merch] Fetching products from DB');
 
     const pool = getDatabase();
@@ -98,7 +98,7 @@ router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merc
   }
 });
 
-router.get('/products/:id', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache((req) => `merch:product:${req.params.id}`, 60), async (req, res) => {
+router.get('/products/:id', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache((req) => `merch:product:${req.params.id}`, 600), async (req, res) => {
   try {
     const pool = getDatabase();
     const [products] = await pool.query('SELECT * FROM merch_products WHERE id = ?', [req.params.id]);
@@ -160,7 +160,8 @@ router.post('/products', protect, upload.array('images', 10), async (req, res) =
 
     // âš¡ CACHE INVALIDATION
     await invalidateCache('merch:products');
-    getIO().emit('merch_update', { type: 'create' });
+    emitEvent('merch_update', { type: 'create' });
+    console.log(`✨ [Merch] Created new product: ${name} (ID: ${result.insertId})`);
 
     res.status(201).json({ id: result.insertId, message: 'Produkt erstellt', images: finalImages });
   } catch (error) {
@@ -207,7 +208,8 @@ router.put('/products/:id', protect, upload.array('images', 10), async (req, res
 
     // âš¡ CACHE INVALIDATION
     await invalidateCache(['merch:products', `merch:product:${id}`]);
-    getIO().emit('merch_update', { id }); // Signalisiert Clients, neu zu laden
+    emitEvent('merch_update', { id, type: 'update' }); // Signalisiert Clients, neu zu laden
+    console.log(`📝 [Merch] Updated product: ${id}`);
 
     res.json({ message: 'Produkt aktualisiert', images: finalImages });
   } catch (error) {
@@ -223,7 +225,8 @@ router.delete('/products/:id', protect, async (req, res) => {
     
     // âš¡ CACHE INVALIDATION
     await invalidateCache(['merch:products', `merch:product:${req.params.id}`]);
-    getIO().emit('merch_update', { id: req.params.id, type: 'delete' });
+    emitEvent('merch_update', { id: req.params.id, type: 'delete' });
+    console.log(`🗑️ [Merch] Deleted product: ${req.params.id}`);
 
     res.json({ message: 'Produkt gelÃ¶scht' });
   } catch (error) {

@@ -141,8 +141,12 @@ app.use("/api", rateLimit({ windowMs: 60 * 1000, max: 300, keyPrefix: 'global' }
 
 // Cache-Control Optimierung
 app.use("/api", (req, res, next) => {
-  // Für GET Requests erlauben wir kurzes Caching (10s), um F5-Spam auf DB zu reduzieren
-  if (req.method === 'GET') {
+  // Admin-Routen niemals cachen (Browser), damit Live-Updates sofort wirken
+  if (req.originalUrl && req.originalUrl.includes('/admin')) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  }
+  // Für andere GET Requests erlauben wir kurzes Caching (10s), um F5-Spam auf DB zu reduzieren
+  else if (req.method === 'GET') {
     res.set('Cache-Control', 'public, max-age=10, must-revalidate');
   } else {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');

@@ -4,7 +4,7 @@ import { sendTicketEmail } from "./email.js";
 import { generateTicketId } from "../utils/helpers.js";
 import QRCode from "qrcode";
 import { emitEvent } from "./socket.js";
-import * as cacheService from "./cache.js";
+import { invalidateCache } from "../middleware/cache.js";
 
 // Sicherstellen, dass der Server nicht abstürzt, wenn der Key fehlt
 const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -299,6 +299,7 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   // Finale Verfügbarkeitsprüfung (Stock prüfen)
   const currentStock = selectedTier.amountTickets ?? 0;
   if (parseInt(quantity) > currentStock) {
+    console.error(`🚨 CRITICAL: Overselling detected for Event ${eventId}, Tier ${tierId}. Payment ${paymentId} was successful but stock is empty.`);
     throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${currentStock} verfügbar.`);
   }
 
@@ -373,17 +374,13 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   // ⚡ REALTIME UPDATE & CACHE INVALIDATION
   try {
     // 1. Cache für Events invalidieren (damit der nächste Fetch frisch ist)
-    await cacheService.invalidate([
-      cacheService.KEYS.EVENTS_ALL, 
-      cacheService.KEYS.EVENT_DETAIL(eventId)
-    ]);
-    
-    // Admin-Listen invalidieren (Wildcard-Löschung wäre hier ideal, 
-    // aber wir löschen zumindest den Haupt-Key falls vorhanden)
-    // await cacheService.invalidate('admin:tickets:list'); 
+    await invalidateCache(['events:all', `events:detail:${eventId}`]);
 
     // 2. Push an alle Clients: "Hey, für dieses Event hat sich der Stock geändert!"
     emitEvent('ticket_update', { eventId, tierId, remaining: selectedTier.amountTickets });
+    // Auch event_update senden für allgemeine Listener
+    emitEvent('event_update', { id: eventId, type: 'update' });
+    console.log(`📝 [Events] Stock updated for event: ${eventId}`);
   } catch (e) { console.error("Realtime update failed", e); }
 
   // Email mit Ticket versenden
@@ -506,13 +503,11 @@ export const createMerchOrderAfterPayment = async (metadata, paymentId, amountTo
     // ⚡ REALTIME UPDATE MERCH
     try {
       // Cache invalidieren
-      await cacheService.invalidate([
-        cacheService.KEYS.MERCH_ALL, 
-        cacheService.KEYS.MERCH_DETAIL(productId)
-      ]);
+      await invalidateCache(['merch:products', `merch:product:${productId}`]);
       
       // Push Update
-      emitEvent('merch_stock_update', { productId, size, remaining: stock[size] });
+      emitEvent('merch_update', { id: productId, type: 'update' });
+      console.log(`📝 [Merch] Stock updated for product: ${productId} (Size: ${size})`);
     } catch (e) { console.error("Merch realtime update failed", e); }
   }
 

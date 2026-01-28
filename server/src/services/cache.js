@@ -1,33 +1,45 @@
-import NodeCache from "node-cache";
+import redisClient from "../config/redis.js";
 
-// Standard TTL: 5 Minuten, Check-Period: 1 Minute
-const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
+// Standard TTL: 10 Minuten (da wir Invalidation haben, können wir länger cachen)
+const DEFAULT_TTL = 600;
 
 export const KEYS = {
-  // Wir nutzen hier die URLs als Keys, damit die Middleware sie automatisch findet
-  EVENTS_ALL: "/api/events",
-  EVENT_DETAIL: (id) => `/api/events/${id}`,
-  MERCH_ALL: "/api/merch/products",
-  MERCH_DETAIL: (id) => `/api/merch/products/${id}`,
+  // Keys müssen exakt mit den in den Routen verwendeten Strings übereinstimmen
+  EVENTS_ALL: "events:all",
+  EVENT_DETAIL: (id) => `events:detail:${id}`,
+  MERCH_ALL: "merch:products",
+  MERCH_DETAIL: (id) => `merch:product:${id}`,
 };
 
-export const get = (key) => {
-  return cache.get(key);
+export const get = async (key) => {
+  try {
+    const data = await redisClient.get(key);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error(`❌ [Redis] Get Error for key ${key}:`, error.message);
+    return null; // Fallback zur Datenbank
+  }
 };
 
-export const set = (key, value, ttl) => {
-  cache.set(key, value, ttl);
+export const set = async (key, value, ttl = DEFAULT_TTL) => {
+  try {
+    await redisClient.set(key, JSON.stringify(value), 'EX', ttl);
+  } catch (error) {
+    console.error(`❌ [Redis] Set Error for key ${key}:`, error.message);
+  }
 };
 
-export const invalidate = (keys) => {
+export const invalidate = async (keys) => {
   if (!keys) return;
-  
   const keysArray = Array.isArray(keys) ? keys : [keys];
-  
-  // Löscht exakte Matches
-  cache.del(keysArray);
-  
-  console.log(`[Cache] Invalidated: ${keysArray.join(', ')}`);
+  if (keysArray.length === 0) return;
+
+  try {
+    await redisClient.del(keysArray);
+    console.log(`🗑️ [Redis] Invalidated: ${keysArray.join(', ')}`);
+  } catch (error) {
+    console.error(`❌ [Redis] Invalidate Error:`, error.message);
+  }
 };
 
 export default {

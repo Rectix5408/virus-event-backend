@@ -7,13 +7,6 @@ const router = express.Router();
 // Middleware (vereinfacht, hier sollte deine Auth-Middleware stehen)
 const isAdmin = (req, res, next) => next();
 
-// --- Simple In-Memory Cache ---
-// Verhindert DB-Überlastung durch Polling
-const cache = new Map();
-const CACHE_TTL = 5000; // 5 Sekunden Gültigkeit
-
-const clearCache = () => cache.clear();
-
 // GET: Alle Tickets abrufen (mit Filter & Suche)
 router.get('/', isAdmin, async (req, res) => {
     try {
@@ -21,14 +14,6 @@ router.get('/', isAdmin, async (req, res) => {
 
         console.log(`[AdminTickets] Fetching tickets. EventId: '${eventId}', Search: '${search}'`);
         
-        // Cache Key basierend auf Query Params
-        const cacheKey = `tickets_${eventId || 'all'}_${search || ''}`;
-        const cached = cache.get(cacheKey);
-        
-        if (cached && Date.now() < cached.expiry) {
-            return res.json(cached.data);
-        }
-
         const db = getDatabase();
         
         let query = `
@@ -56,9 +41,6 @@ router.get('/', isAdmin, async (req, res) => {
 
         const [rows] = await db.query(query, params);
         
-        // Ergebnis cachen
-        cache.set(cacheKey, { data: rows, expiry: Date.now() + CACHE_TTL });
-        
         res.json(rows);
     } catch (error) {
         console.error(error);
@@ -78,7 +60,6 @@ router.put('/:id', isAdmin, async (req, res) => {
             [firstName, lastName, email, status, checkIn ? 1 : 0, id]
         );
 
-        clearCache();
         // Event senden damit alle Clients aktualisieren
         emitEvent('ticket_update', { action: 'update', ticketId: id });
 
@@ -96,7 +77,6 @@ router.delete('/:id', isAdmin, async (req, res) => {
         const db = getDatabase();
         await db.query('DELETE FROM tickets WHERE id = ?', [id]);
         
-        clearCache();
         emitEvent('ticket_update', { action: 'delete', ticketId: id });
 
         res.json({ success: true });
@@ -121,7 +101,6 @@ router.post('/:id/checkin', isAdmin, async (req, res) => {
             [checkIn ? 1 : 0, checkInTime, id]
         );
 
-        clearCache();
         emitEvent('ticket_update', { action: 'checkin', ticketId: id, status: checkIn });
         
         res.json({ success: true, checkInTime });
