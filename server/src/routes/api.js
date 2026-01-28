@@ -322,7 +322,9 @@ router.post("/settings/maintenance", protect, async (req, res) => {
  */
 router.post("/contact", async (req, res) => {
   try {
-    const { name, email, subject, message } = req.body;
+    const { name, email, subject, message, deviceId } = req.body;
+    // IP-Adresse ermitteln (berücksichtigt Proxies)
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     const db = getDatabase();
     
     await db.execute(`
@@ -333,14 +335,35 @@ router.post("/contact", async (req, res) => {
         subject VARCHAR(255),
         message TEXT,
         reply_message TEXT,
+        ip_address VARCHAR(45),
+        device_id VARCHAR(255),
         status VARCHAR(50) DEFAULT 'open',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+    // Auto-Migration: Spalten hinzufügen falls sie fehlen
+    try { await db.execute("ALTER TABLE contact_requests ADD COLUMN ip_address VARCHAR(45)"); } catch (e) {}
+    try { await db.execute("ALTER TABLE contact_requests ADD COLUMN device_id VARCHAR(255)"); } catch (e) {}
+
+    // Spam-Schutz: Prüfen ob in den letzten 3 Tagen (72 Stunden) bereits eine Anfrage kam
+    const [existing] = await db.execute(
+      `SELECT id FROM contact_requests 
+       WHERE (email = ? OR (ip_address = ? AND ip_address != '') OR (device_id = ? AND device_id != '')) 
+       AND created_at > DATE_SUB(NOW(), INTERVAL 3 DAY)
+       LIMIT 1`,
+      [email, ip, deviceId || '']
+    );
+
+    if (existing.length > 0) {
+      return res.status(429).json({ 
+        message: "Spam-Schutz: Du hast uns bereits kontaktiert. Bitte warte 3 Tage vor einer erneuten Anfrage." 
+      });
+    }
+
     await db.execute(
-      "INSERT INTO contact_requests (name, email, subject, message) VALUES (?, ?, ?, ?)",
-      [name, email, subject, message]
+      "INSERT INTO contact_requests (name, email, subject, message, ip_address, device_id) VALUES (?, ?, ?, ?, ?, ?)",
+      [name, email, subject, message, ip, deviceId]
     );
 
     // Emit event for realtime updates in admin dashboard
