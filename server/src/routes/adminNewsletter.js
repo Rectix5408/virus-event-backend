@@ -1,6 +1,6 @@
 import express from 'express';
 import { getDatabase } from '../config/database.js';
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -38,7 +38,7 @@ router.post('/send', isAdmin, async (req, res) => {
 
     try {
         await connection.beginTransaction();
-        const newsletterId = uuidv4();
+        const newsletterId = crypto.randomUUID();
 
         await connection.execute(
             "INSERT INTO newsletters (id, subject, contentHtml, contentText, status) VALUES (?, ?, ?, ?, 'sending')",
