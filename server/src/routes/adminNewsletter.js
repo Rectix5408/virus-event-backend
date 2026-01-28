@@ -1,6 +1,7 @@
 import express from 'express';
 import { getDatabase } from '../config/database.js';
 import crypto from 'crypto';
+import { getAllSubscribers } from '../services/newsletter.js';
 
 const router = express.Router();
 
@@ -20,6 +21,16 @@ router.get('/', isAdmin, async (req, res) => {
             ORDER BY n.createdAt DESC
         `);
         res.json(rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+router.get('/subscribers', isAdmin, async (req, res) => {
+    try {
+        const subscribers = await getAllSubscribers();
+        res.json(subscribers);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Database error' });

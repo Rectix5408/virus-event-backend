@@ -1,6 +1,19 @@
 import { getDatabase } from "../config/database.js";
 import crypto from 'crypto';
 import { sendEmail } from "./email.js";
+import { emitEvent } from "./socket.js";
+
+// In-Memory Cache für Abonnenten-Liste (verhindert DB-Überlastung)
+let subscribersCache = null;
+
+export const getAllSubscribers = async () => {
+  if (subscribersCache) return subscribersCache;
+
+  const db = getDatabase();
+  const [rows] = await db.query("SELECT id, email, firstName, is_subscribed, subscribed_at, unsubscribed_at, ipAddress FROM newsletter_subscribers ORDER BY subscribed_at DESC");
+  subscribersCache = rows;
+  return rows;
+};
 
 export const subscribe = async (email, firstName, ipAddress) => {
   const db = getDatabase();
@@ -32,6 +45,10 @@ export const subscribe = async (email, firstName, ipAddress) => {
         [email, firstName, confirmationToken, unsubscribeToken, ipAddress]
       );
     }
+
+    // Cache invalidieren & Live-Update senden
+    subscribersCache = null;
+    emitEvent('newsletter_update', { type: 'subscribers' });
 
     const confirmLink = `${process.env.FRONTEND_URL}/newsletter/confirm?token=${confirmationToken}`;
     await sendEmail({
@@ -67,6 +84,11 @@ export const confirmSubscription = async (token) => {
       "UPDATE newsletter_subscribers SET is_subscribed = 1, confirmationToken = NULL WHERE id = ?",
       [rows[0].id]
     );
+
+    // Cache invalidieren & Live-Update senden
+    subscribersCache = null;
+    emitEvent('newsletter_update', { type: 'subscribers' });
+
     return { success: true };
   } finally {
     connection.release();
@@ -79,5 +101,10 @@ export const unsubscribe = async (token) => {
     "UPDATE newsletter_subscribers SET is_subscribed = 0, unsubscribed_at = NOW() WHERE unsubscribeToken = ?",
     [token]
   );
+
+  // Cache invalidieren & Live-Update senden
+  subscribersCache = null;
+  emitEvent('newsletter_update', { type: 'subscribers' });
+
   return { success: true };
 };
