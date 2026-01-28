@@ -322,7 +322,7 @@ router.post("/settings/maintenance", protect, async (req, res) => {
  */
 router.post("/contact", async (req, res) => {
   try {
-    const { name, email, subject, message, deviceId } = req.body;
+    const { name, email, subject, message, deviceId, location } = req.body;
     // IP-Adresse ermitteln (berücksichtigt Proxies)
     const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     const db = getDatabase();
@@ -337,6 +337,7 @@ router.post("/contact", async (req, res) => {
         reply_message TEXT,
         ip_address VARCHAR(45),
         device_id VARCHAR(255),
+        location TEXT,
         status VARCHAR(50) DEFAULT 'open',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -345,6 +346,7 @@ router.post("/contact", async (req, res) => {
     // Auto-Migration: Spalten hinzufügen falls sie fehlen
     try { await db.execute("ALTER TABLE contact_requests ADD COLUMN ip_address VARCHAR(45)"); } catch (e) {}
     try { await db.execute("ALTER TABLE contact_requests ADD COLUMN device_id VARCHAR(255)"); } catch (e) {}
+    try { await db.execute("ALTER TABLE contact_requests ADD COLUMN location TEXT"); } catch (e) {}
 
     // Spam-Schutz: Prüfen ob in den letzten 3 Tagen (72 Stunden) bereits eine Anfrage kam
     const [existing] = await db.execute(
@@ -362,8 +364,8 @@ router.post("/contact", async (req, res) => {
     }
 
     await db.execute(
-      "INSERT INTO contact_requests (name, email, subject, message, ip_address, device_id) VALUES (?, ?, ?, ?, ?, ?)",
-      [name, email, subject, message, ip, deviceId]
+      "INSERT INTO contact_requests (name, email, subject, message, ip_address, device_id, location) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [name, email, subject, message, ip, deviceId, location]
     );
 
     // Emit event for realtime updates in admin dashboard
