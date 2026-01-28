@@ -47,7 +47,7 @@ const processBatch = async () => {
       WHERE q.status = 'pending'
       ORDER BY q.createdAt ASC
       LIMIT ?
-    `, [BATCH_SIZE.toString()]);
+    `, [BATCH_SIZE]);
 
     if (jobs.length === 0) {
         await checkCompletedNewsletters(db);

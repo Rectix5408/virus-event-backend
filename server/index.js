@@ -71,9 +71,27 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Middleware: Datum-Format für MySQL fixen (ISO String -> YYYY-MM-DD)
 app.use((req, res, next) => {
-  if (req.body && req.body.dateISO && typeof req.body.dateISO === 'string') {
-    if (req.body.dateISO.includes('T')) {
-      req.body.dateISO = req.body.dateISO.split('T')[0];
+  if (req.body) {
+    // 1. Vorhandenes dateISO bereinigen
+    if (req.body.dateISO && typeof req.body.dateISO === 'string') {
+      if (req.body.dateISO.includes('T')) {
+        req.body.dateISO = req.body.dateISO.split('T')[0];
+      }
+    }
+    // 2. Fallback: dateISO aus deutschem Datum generieren (z.B. "01. MAI 2026")
+    else if (!req.body.dateISO && req.body.date && typeof req.body.date === 'string') {
+      const months = {
+        'JANUAR': '01', 'FEBRUAR': '02', 'MÄRZ': '03', 'APRIL': '04', 'MAI': '05', 'JUNI': '06',
+        'JULI': '07', 'AUGUST': '08', 'SEPTEMBER': '09', 'OKTOBER': '10', 'NOVEMBER': '11', 'DEZEMBER': '12',
+        'JAN': '01', 'FEB': '02', 'MRZ': '03', 'APR': '04', 'JUN': '06', 'JUL': '07', 'AUG': '08', 'SEP': '09', 'OKT': '10', 'NOV': '11', 'DEZ': '12'
+      };
+      const parts = req.body.date.trim().toUpperCase().split(' ');
+      if (parts.length >= 3) {
+        const day = parts[0].replace('.', '').padStart(2, '0');
+        const month = months[parts[1]] || '01';
+        const year = parts[2];
+        req.body.dateISO = `${year}-${month}-${day}`;
+      }
     }
   }
   next();
@@ -209,6 +227,21 @@ const runMigrations = async () => {
           ADD COLUMN country VARCHAR(100) AFTER city
         `);
         console.log("✅ Schema migration successful: Added address fields to merch_orders table.");
+      }
+
+      // Prüfen ob 'firstName' Spalte in 'newsletter_subscribers' existiert
+      const [subColumns] = await connection.execute("SHOW COLUMNS FROM newsletter_subscribers LIKE 'firstName'");
+      
+      if (subColumns.length === 0) {
+        console.log("⚠️ Missing columns detected in 'newsletter_subscribers'. Running migration...");
+        await connection.execute(`
+          ALTER TABLE newsletter_subscribers
+          ADD COLUMN firstName VARCHAR(100) AFTER email,
+          ADD COLUMN confirmationToken VARCHAR(100) AFTER is_subscribed,
+          ADD COLUMN unsubscribeToken VARCHAR(100) AFTER confirmationToken,
+          ADD COLUMN ipAddress VARCHAR(45) AFTER unsubscribeToken
+        `);
+        console.log("✅ Schema migration successful: Added fields to newsletter_subscribers table.");
       }
 
       console.log("✅ Database schema check complete.");
