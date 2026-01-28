@@ -76,10 +76,11 @@ const safeJsonParse = (data, fallback) => {
 };
 
 // CRUD Routes (unverÃ¤ndert, ausgelassen fÃ¼r KÃ¼rze)
-router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merch:products', 60), async (req, res) => {
+router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merch:products', 5), async (req, res) => {
   try {
-    // âš¡ HTTP CACHE: Browser soll das Ergebnis fÃ¼r 60 Sekunden cachen
-    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=30');
+    // ⚡ HTTP CACHE: Cache-Zeit auf 10s reduziert, damit Änderungen schneller sichtbar sind
+    res.set('Cache-Control', 'public, max-age=10, stale-while-revalidate=10');
+    console.log('📦 [Merch] Fetching products from DB');
 
     const pool = getDatabase();
     const [products] = await pool.query('SELECT * FROM merch_products ORDER BY created_at DESC');
