@@ -42,6 +42,11 @@ const allowedOrigins = [
   "http://localhost:8080",
 ];
 
+// Dynamisch die konfigurierte Frontend-URL hinzufügen
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 // CORS Konfiguration
 const corsOptions = {
   origin: function (origin, callback) {
