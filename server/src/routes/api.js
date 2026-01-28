@@ -265,4 +265,52 @@ router.post("/tickets/:id/resend", protect, async (req, res) => {
   res.json({ success: true, message: "Email resent successfully" });
 });
 
+/**
+ * GET /api/settings/maintenance
+ * Get maintenance mode status
+ */
+router.get("/settings/maintenance", async (req, res) => {
+  try {
+    const db = getDatabase();
+    // Ensure table exists (Auto-Migration for simplicity)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS settings (
+        setting_key VARCHAR(50) PRIMARY KEY,
+        setting_value VARCHAR(255)
+      )
+    `);
+
+    const [rows] = await db.execute("SELECT setting_value FROM settings WHERE setting_key = 'maintenance_mode'");
+    const isActive = rows.length > 0 && rows[0].setting_value === 'true';
+    
+    res.json({ isActive });
+  } catch (error) {
+    console.error("Get maintenance settings error:", error);
+    // Default to false if DB fails, to not lock out users accidentally
+    res.json({ isActive: false });
+  }
+});
+
+/**
+ * POST /api/settings/maintenance
+ * Toggle maintenance mode (Admin)
+ */
+router.post("/settings/maintenance", protect, async (req, res) => {
+  try {
+    const { isActive } = req.body;
+    const db = getDatabase();
+    
+    await db.execute(`
+      INSERT INTO settings (setting_key, setting_value) 
+      VALUES ('maintenance_mode', ?) 
+      ON DUPLICATE KEY UPDATE setting_value = ?
+    `, [String(isActive), String(isActive)]);
+    
+    res.json({ success: true, isActive });
+  } catch (error) {
+    console.error("Update maintenance settings error:", error);
+    res.status(500).json({ message: "Failed to update settings" });
+  }
+});
+
 export default router;
