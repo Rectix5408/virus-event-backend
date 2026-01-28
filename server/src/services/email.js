@@ -101,3 +101,18 @@ export const sendOrderConfirmationEmail = async (order) => {
 
   return sendEmail({ to, subject, html, text });
 };
+
+/**
+ * Verifiziert die Verbindung zum Mailserver beim Start
+ */
+export const verifyEmailService = async () => {
+  const transport = createTransporter();
+  try {
+    await transport.verify();
+    console.log("✅ Email service ready");
+    return true;
+  } catch (error) {
+    console.error("❌ Email service verification failed:", error);
+    return false;
+  }
+};
