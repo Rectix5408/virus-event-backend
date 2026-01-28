@@ -305,6 +305,9 @@ router.post("/settings/maintenance", protect, async (req, res) => {
       VALUES ('maintenance_mode', ?) 
       ON DUPLICATE KEY UPDATE setting_value = ?
     `, [String(isActive), String(isActive)]);
+
+    // Emit event for realtime updates
+    emitEvent("maintenance_update", { isActive });
     
     res.json({ success: true, isActive });
   } catch (error) {
