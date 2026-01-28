@@ -19,7 +19,7 @@ router.get('/', isAdmin, async (req, res) => {
     try {
         const { eventId, search } = req.query;
 
-        // console.log(`[AdminTickets] Fetching tickets. EventId: ${eventId}, Search: ${search}`);
+        console.log(`[AdminTickets] Fetching tickets. EventId: '${eventId}', Search: '${search}'`);
         
         // Cache Key basierend auf Query Params
         const cacheKey = `tickets_${eventId || 'all'}_${search || ''}`;
@@ -39,9 +39,10 @@ router.get('/', isAdmin, async (req, res) => {
         `;
         const params = [];
 
-        if (eventId && eventId !== 'all' && eventId !== 'undefined') {
+        // Robusterer Check für eventId
+        if (eventId && eventId !== 'all' && eventId !== 'undefined' && eventId.trim() !== '') {
             query += ' AND t.eventId = ?';
-            params.push(eventId);
+            params.push(eventId.trim());
         }
 
         if (search) {
