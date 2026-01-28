@@ -78,8 +78,8 @@ const safeJsonParse = (data, fallback) => {
 // CRUD Routes (unverÃ¤ndert, ausgelassen fÃ¼r KÃ¼rze)
 router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merch:products', 600), async (req, res) => {
   try {
-    // ⚡ HTTP CACHE: 30s Browser Cache, 10min Redis Cache (Invalidation via Socket)
-    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=30');
+    // ⚡ HTTP CACHE: Browser Cache aus, damit Live-Updates sofort sichtbar sind.
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     console.log('📦 [Merch] Fetching products from DB');
 
     const pool = getDatabase();

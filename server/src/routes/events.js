@@ -19,7 +19,9 @@ const safeParse = (jsonString, fallback) => {
 // GET /api/events - Alle Events abrufen (Public, Cached)
 router.get('/', rateLimit({ windowMs: 60 * 1000, max: 100 }), cache('events:all', 600), async (req, res) => {
   try {
-    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=30');
+    // Browser Cache deaktivieren, damit Live-Updates (Socket.io) sofort wirken.
+    // Wir verlassen uns auf den Redis-Cache im Backend für Performance.
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     const db = getDatabase();
     const [events] = await db.query("SELECT * FROM events ORDER BY dateISO ASC");
 
@@ -39,7 +41,7 @@ router.get('/', rateLimit({ windowMs: 60 * 1000, max: 100 }), cache('events:all'
 // GET /api/events/:id - Einzelnes Event (Public, Cached)
 router.get('/:id', rateLimit({ windowMs: 60 * 1000, max: 100 }), cache((req) => `events:detail:${req.params.id}`, 600), async (req, res) => {
   try {
-    res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=30');
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     const db = getDatabase();
     const [rows] = await db.query("SELECT * FROM events WHERE id = ?", [req.params.id]);
 
