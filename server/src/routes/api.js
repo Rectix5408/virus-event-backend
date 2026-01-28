@@ -343,6 +343,9 @@ router.post("/contact", async (req, res) => {
       [name, email, subject, message]
     );
 
+    // Emit event for realtime updates in admin dashboard
+    emitEvent("contact_update", { type: "new_request" });
+
     res.json({ success: true, message: "Request submitted" });
   } catch (error) {
     console.error("Contact submit error:", error);
