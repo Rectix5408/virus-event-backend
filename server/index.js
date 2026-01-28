@@ -215,6 +215,27 @@ const runMigrations = async () => {
         console.log("✅ Schema migration successful: Added address fields to tickets table.");
       }
 
+      // Prüfen ob 'eventTitle' Spalte in 'tickets' existiert (für bessere Sortierung im Admin Dashboard)
+      const [ticketTitleCol] = await connection.execute("SHOW COLUMNS FROM tickets LIKE 'eventTitle'");
+      
+      if (ticketTitleCol.length === 0) {
+        console.log("⚠️ Missing column 'eventTitle' in 'tickets'. Running migration...");
+        await connection.execute(`
+          ALTER TABLE tickets
+          ADD COLUMN eventTitle VARCHAR(255) AFTER eventId
+        `);
+        
+        // Bestehende Tickets aktualisieren (Daten aus Events-Tabelle holen)
+        console.log("🔄 Populating eventTitle for existing tickets...");
+        await connection.execute(`
+          UPDATE tickets t
+          INNER JOIN events e ON t.eventId = e.id
+          SET t.eventTitle = e.title
+        `);
+        
+        console.log("✅ Schema migration successful: Added eventTitle to tickets table.");
+      }
+
       // Prüfen ob 'zipCode' Spalte in 'merch_orders' existiert
       const [merchColumns] = await connection.execute("SHOW COLUMNS FROM merch_orders LIKE 'zipCode'");
       

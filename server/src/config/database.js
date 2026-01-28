@@ -63,6 +63,7 @@ export const createTables = async () => {
         tierId VARCHAR(50) NOT NULL,
         tierName VARCHAR(100) NOT NULL,
         eventId VARCHAR(255) NOT NULL,
+        eventTitle VARCHAR(255),
         quantity INT NOT NULL DEFAULT 1,
         qrCode LONGTEXT NOT NULL,
         checkIn BOOLEAN DEFAULT FALSE,

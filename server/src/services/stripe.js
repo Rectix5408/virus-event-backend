@@ -229,12 +229,15 @@ const handleCheckoutCompleted = async (session) => {
   try {
     await connection.beginTransaction();
 
+    // Fallback für kostenlose Tickets/Bestellungen (kein PaymentIntent bei 0€)
+    const paymentReference = session.payment_intent || session.id;
+
     // Typ prüfen (Ticket vs Merch)
     if (metadata.type === "ticket") {
-      await createTicketAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, connection);
+      await createTicketAfterPayment(session.metadata, paymentReference, session.amount_total / 100, connection);
     } else if (metadata.type === "merch") {
       const email = session.metadata.email || session.customer_details?.email || session.customer_email;
-      await createMerchOrderAfterPayment(session.metadata, session.payment_intent, session.amount_total / 100, email, connection);
+      await createMerchOrderAfterPayment(session.metadata, paymentReference, session.amount_total / 100, email, connection);
     }
 
     await connection.commit();
@@ -319,8 +322,8 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   // Ticket in Datenbank speichern
   try {
     await connection.execute(
-      `INSERT INTO tickets (id, email, firstName, lastName, address, zipCode, city, mobileNumber, tierId, tierName, eventId, quantity, qrCode, paymentIntentId, status, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
+      `INSERT INTO tickets (id, email, firstName, lastName, address, zipCode, city, mobileNumber, tierId, tierName, eventId, eventTitle, quantity, qrCode, paymentIntentId, status, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
       [
         ticketId,
         email,
@@ -333,6 +336,7 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
         tierId,
         selectedTier.name,
         eventId,
+        event.title,
         parseInt(quantity),
         qrCodeImage,
         paymentId
