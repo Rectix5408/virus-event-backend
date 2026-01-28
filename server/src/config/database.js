@@ -112,7 +112,11 @@ export const createTables = async () => {
       CREATE TABLE IF NOT EXISTS newsletter_subscribers (
         id INT AUTO_INCREMENT PRIMARY KEY,
         email VARCHAR(255) NOT NULL UNIQUE,
+        firstName VARCHAR(100),
         is_subscribed BOOLEAN DEFAULT TRUE,
+        confirmationToken VARCHAR(100),
+        unsubscribeToken VARCHAR(100),
+        ipAddress VARCHAR(45),
         subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         unsubscribed_at TIMESTAMP NULL
       )
