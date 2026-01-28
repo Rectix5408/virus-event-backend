@@ -118,6 +118,36 @@ export const createTables = async () => {
       )
     `);
 
+    // Newsletters Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS newsletters (
+        id VARCHAR(36) PRIMARY KEY,
+        subject VARCHAR(255) NOT NULL,
+        contentHtml LONGTEXT NOT NULL,
+        contentText LONGTEXT NOT NULL,
+        status ENUM('draft', 'sending', 'completed') DEFAULT 'draft',
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        sentAt DATETIME
+      )
+    `);
+
+    // Newsletter Queue Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS newsletter_queue (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        newsletterId VARCHAR(36) NOT NULL,
+        subscriberId INT NOT NULL,
+        status ENUM('pending', 'processing', 'sent', 'failed') DEFAULT 'pending',
+        attempts INT DEFAULT 0,
+        lastError TEXT,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (newsletterId) REFERENCES newsletters(id) ON DELETE CASCADE,
+        FOREIGN KEY (subscriberId) REFERENCES newsletter_subscribers(id) ON DELETE CASCADE,
+        INDEX idx_status (status)
+      )
+    `);
+
     // Merch Products Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS merch_products (

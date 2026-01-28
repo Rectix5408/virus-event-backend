@@ -15,6 +15,8 @@ import uploadRouter from './src/routes/upload.js';
 import paymentRoutes from './src/routes/payment.js';
 import webhookRouter from './src/routes/webhook.js';
 import adminRoutes from './src/routes/admin.js';
+import adminNewsletterRoutes from './src/routes/adminNewsletter.js';
+import { startNewsletterWorker } from "./src/services/newsletterQueue.js";
 import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
 import { initSocket } from "./src/services/socket.js";
@@ -134,6 +136,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/webhooks/stripe', webhookRouter);
 app.use('/api/admin', adminRoutes); 
+app.use('/api/admin/newsletter', adminNewsletterRoutes);
 
 // --- Frontend Build Integration ---
 const frontendDist = path.join(__dirname, "../../virus-event-frontend/dist");
@@ -249,6 +252,9 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`✓ CORS enabled for: ${allowedOrigins.join(", ")}`);
+      
+      // Start Newsletter Worker
+      startNewsletterWorker();
     });
   } catch (error) {
     console.error("Failed to start server:", error);

@@ -1,42 +1,83 @@
-// server/src/services/newsletter.js
-import { getDatabase } from '../config/database.js';
+import { getDatabase } from "../config/database.js";
+import crypto from 'crypto';
+import { sendEmail } from "./email.js";
 
-/**
- * Subscribes an email to the newsletter.
- * If the email already exists, it reactivates the subscription.
- * @param {string} email - The email to subscribe.
- * @returns {Promise<any>} The result from the database query.
- */
-export const subscribeEmail = async (email) => {
+export const subscribe = async (email, firstName, ipAddress) => {
   const db = getDatabase();
-  // Use ON DUPLICATE KEY UPDATE to handle existing emails gracefully (reactivates subscription).
-  const query = `
-    INSERT INTO newsletter_subscribers (email, is_subscribed, subscribed_at, unsubscribed_at)
-    VALUES (?, TRUE, NOW(), NULL)
-    ON DUPLICATE KEY UPDATE is_subscribed = TRUE, subscribed_at = NOW(), unsubscribed_at = NULL
-  `;
-  const [result] = await db.query(query, [email]);
-  return result;
+  const connection = await db.getConnection();
+
+  try {
+    const [existing] = await connection.execute(
+      "SELECT * FROM newsletter_subscribers WHERE email = ?", 
+      [email]
+    );
+
+    const confirmationToken = crypto.randomBytes(32).toString('hex');
+    const unsubscribeToken = crypto.randomBytes(32).toString('hex');
+
+    if (existing.length > 0) {
+      const sub = existing[0];
+      if (sub.is_subscribed) { // is_subscribed = 1 means active
+        return { status: 'already_active' };
+      }
+      // Re-Aktivierung
+      await connection.execute(
+        "UPDATE newsletter_subscribers SET is_subscribed = 0, confirmationToken = ?, firstName = ? WHERE id = ?",
+        [confirmationToken, firstName, sub.id]
+      );
+    } else {
+      // Neu anlegen
+      await connection.execute(
+        "INSERT INTO newsletter_subscribers (email, firstName, is_subscribed, confirmationToken, unsubscribeToken, ipAddress) VALUES (?, ?, 0, ?, ?, ?)",
+        [email, firstName, confirmationToken, unsubscribeToken, ipAddress]
+      );
+    }
+
+    const confirmLink = `${process.env.FRONTEND_URL}/newsletter/confirm?token=${confirmationToken}`;
+    await sendEmail({
+      to: email,
+      subject: "Bitte bestätige deine Anmeldung zum VIRUS Newsletter",
+      html: `
+        <h1>Willkommen bei VIRUS, ${firstName || ''}!</h1>
+        <p>Bitte bestätige deine E-Mail-Adresse:</p>
+        <a href="${confirmLink}" style="padding: 10px 20px; background: #000; color: #fff; text-decoration: none;">Bestätigen</a>
+      `,
+      text: `Bitte bestätige deine Anmeldung: ${confirmLink}`
+    });
+
+    return { status: 'pending_confirmation' };
+  } finally {
+    connection.release();
+  }
 };
 
-/**
- * Fetches all currently subscribed email addresses.
- * @returns {Promise<string[]>} An array of email strings.
- */
-export const getAllSubscribers = async () => {
+export const confirmSubscription = async (token) => {
   const db = getDatabase();
-  const query = `SELECT email FROM newsletter_subscribers WHERE is_subscribed = TRUE`;
-  const [rows] = await db.query(query);
-  return rows.map(row => row.email);
+  const connection = await db.getConnection();
+
+  try {
+    const [rows] = await connection.execute(
+      "SELECT * FROM newsletter_subscribers WHERE confirmationToken = ? AND is_subscribed = 0",
+      [token]
+    );
+
+    if (rows.length === 0) throw new Error("Ungültiger Token.");
+
+    await connection.execute(
+      "UPDATE newsletter_subscribers SET is_subscribed = 1, confirmationToken = NULL WHERE id = ?",
+      [rows[0].id]
+    );
+    return { success: true };
+  } finally {
+    connection.release();
+  }
 };
 
-/**
- * Fetches all subscribers with their full data for the admin panel.
- * @returns {Promise<object[]>} An array of subscriber objects.
- */
-export const getSubscribersForAdmin = async () => {
+export const unsubscribe = async (token) => {
   const db = getDatabase();
-  const query = `SELECT id, email, is_subscribed, subscribed_at FROM newsletter_subscribers ORDER BY subscribed_at DESC`;
-  const [rows] = await db.query(query);
-  return rows;
+  await db.execute(
+    "UPDATE newsletter_subscribers SET is_subscribed = 0, unsubscribed_at = NOW() WHERE unsubscribeToken = ?",
+    [token]
+  );
+  return { success: true };
 };
