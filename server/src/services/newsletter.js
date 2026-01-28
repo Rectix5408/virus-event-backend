@@ -36,13 +36,13 @@ export const subscribe = async (email, firstName, ipAddress) => {
       // Re-Aktivierung
       await connection.execute(
         "UPDATE newsletter_subscribers SET is_subscribed = 0, confirmationToken = ?, firstName = ? WHERE id = ?",
-        [confirmationToken, firstName, sub.id]
+        [confirmationToken, firstName || null, sub.id]
       );
     } else {
       // Neu anlegen
       await connection.execute(
         "INSERT INTO newsletter_subscribers (email, firstName, is_subscribed, confirmationToken, unsubscribeToken, ipAddress) VALUES (?, ?, 0, ?, ?, ?)",
-        [email, firstName, confirmationToken, unsubscribeToken, ipAddress]
+        [email, firstName || null, confirmationToken, unsubscribeToken, ipAddress || null]
       );
     }
 
