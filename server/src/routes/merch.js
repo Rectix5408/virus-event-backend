@@ -63,6 +63,18 @@ const parseImages = (data) => {
   }
 };
 
+// Hilfsfunktion zum sicheren Parsen von JSON-Feldern (verhindert Abstürze bei ungültigem JSON)
+const safeJsonParse = (data, fallback) => {
+  if (!data) return fallback;
+  if (typeof data !== 'string') return data;
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    console.warn("⚠️ JSON Parse Warning in Merch Route:", e.message);
+    return fallback;
+  }
+};
+
 // CRUD Routes (unverÃ¤ndert, ausgelassen fÃ¼r KÃ¼rze)
 router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merch:products', 60), async (req, res) => {
   try {
@@ -74,8 +86,8 @@ router.get('/products', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache('merc
     const parsedProducts = products.map(p => ({
       ...p,
       images: parseImages(p.images),
-      sizes: typeof p.sizes === 'string' ? JSON.parse(p.sizes || '[]') : (p.sizes || []),
-      stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
+      sizes: safeJsonParse(p.sizes, []),
+      stock: safeJsonParse(p.stock, {}),
       price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
     }));
 
@@ -94,8 +106,8 @@ router.get('/products/:id', rateLimit({ windowMs: 60 * 1000, max: 60 }), cache((
     const parsedProduct = {
       ...p,
       images: parseImages(p.images),
-      sizes: typeof p.sizes === 'string' ? JSON.parse(p.sizes || '[]') : (p.sizes || []),
-      stock: typeof p.stock === 'string' ? JSON.parse(p.stock || '{}') : (p.stock || {}),
+      sizes: safeJsonParse(p.sizes, []),
+      stock: safeJsonParse(p.stock, {}),
       price: typeof p.price === 'string' ? parseFloat(p.price) : p.price
     };
 
