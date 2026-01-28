@@ -6,6 +6,7 @@ import { updateCheckIn, getTicketById, getTicketsByEmail, getEventStats, findTic
 import users from "./users.js";
 import { protect } from './auth.js';
 import { getDatabase } from "../config/database.js";
+import { emitEvent } from "../services/socket.js";
 
 const router = express.Router();
 
