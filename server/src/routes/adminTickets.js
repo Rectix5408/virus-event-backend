@@ -30,7 +30,7 @@ router.get('/', isAdmin, async (req, res) => {
         const db = getDatabase();
         
         let query = `
-            SELECT t.*, e.title as eventName 
+            SELECT t.*, e.title as eventName, e.dateISO as eventDate
             FROM tickets t 
             LEFT JOIN events e ON t.eventId = e.id
             WHERE 1=1
@@ -48,7 +48,8 @@ router.get('/', isAdmin, async (req, res) => {
             params.push(searchParam, searchParam, searchParam, searchParam);
         }
 
-        query += ' ORDER BY t.createdAt DESC';
+        // Sortierung: Zuerst nach Event-Datum (Zukunft -> Vergangenheit), dann nach Ticket-Kaufdatum
+        query += ' ORDER BY e.dateISO DESC, t.createdAt DESC';
 
         const [rows] = await db.query(query, params);
         
