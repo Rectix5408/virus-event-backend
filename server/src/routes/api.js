@@ -42,7 +42,7 @@ router.get("/tickets", protect, async (req, res) => {
  */
 router.post("/create-checkout-session", checkoutLimiter, async (req, res) => {
   try {
-    const { tierId, quantity, email, firstName, lastName, address, zipCode, city, mobileNumber, eventId, successUrl, cancelUrl } = req.body;
+    const { tierId, quantity, email, firstName, lastName, address, zipCode, city, mobileNumber, eventId, successUrl, cancelUrl, discountCode } = req.body;
 
     // Validation
     if (!tierId || !quantity || !email || !firstName || !lastName || !address || !zipCode || !city || !mobileNumber || !eventId) {
@@ -55,6 +55,27 @@ router.post("/create-checkout-session", checkoutLimiter, async (req, res) => {
 
     if (quantity < 1) {
       return res.status(400).json({ message: "Quantity must be at least 1" });
+    }
+
+    // Validate Discount Code
+    let discount = null;
+    if (discountCode) {
+      const db = getDatabase();
+      const [codes] = await db.execute("SELECT * FROM discount_codes WHERE code = ? AND is_active = 1", [discountCode]);
+      
+      if (codes.length > 0) {
+        const code = codes[0];
+        const now = new Date();
+        
+        if (code.expires_at && new Date(code.expires_at) < now) {
+          // Expired
+        } else if (code.max_uses !== null && code.used_count >= code.max_uses) {
+          // Usage limit reached
+        } else {
+          discount = code;
+          // Note: Usage count increment should happen in webhook after successful payment
+        }
+      }
     }
 
     // Create session
@@ -71,6 +92,7 @@ router.post("/create-checkout-session", checkoutLimiter, async (req, res) => {
       eventId,
       successUrl: successUrl || `${process.env.FRONTEND_URL}/tickets/success`,
       cancelUrl: cancelUrl || `${process.env.FRONTEND_URL}/tickets`,
+      discount, // Pass discount object to service
     });
 
     res.status(200).json(session);
@@ -453,6 +475,91 @@ router.post("/admin/contact/:id/reply", protect, async (req, res) => {
   } catch (error) {
     console.error("Reply error:", error);
     res.status(500).json({ message: "Failed to send reply" });
+  }
+});
+
+/**
+ * GET /api/admin/discounts
+ * Get all discount codes
+ */
+router.get("/admin/discounts", protect, async (req, res) => {
+  try {
+    const db = getDatabase();
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS discount_codes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        type ENUM('percent', 'fixed') NOT NULL,
+        value DECIMAL(10, 2) NOT NULL,
+        max_uses INT DEFAULT NULL,
+        used_count INT DEFAULT 0,
+        expires_at DATETIME DEFAULT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    const [rows] = await db.execute("SELECT * FROM discount_codes ORDER BY created_at DESC");
+    res.json(rows);
+  } catch (error) {
+    console.error("Get discounts error:", error);
+    res.status(500).json({ message: "Failed to fetch discounts" });
+  }
+});
+
+/**
+ * POST /api/admin/discounts
+ * Create a discount code
+ */
+router.post("/admin/discounts", protect, async (req, res) => {
+  try {
+    const { code, type, value, max_uses, expires_at } = req.body;
+    const db = getDatabase();
+    
+    await db.execute(
+      "INSERT INTO discount_codes (code, type, value, max_uses, expires_at) VALUES (?, ?, ?, ?, ?)",
+      [code.toUpperCase(), type, value, max_uses || null, expires_at || null]
+    );
+    
+    res.json({ success: true, message: "Discount code created" });
+  } catch (error) {
+    console.error("Create discount error:", error);
+    res.status(500).json({ message: "Failed to create discount code" });
+  }
+});
+
+/**
+ * DELETE /api/admin/discounts/:id
+ */
+router.delete("/admin/discounts/:id", protect, async (req, res) => {
+  try {
+    const db = getDatabase();
+    await db.execute("DELETE FROM discount_codes WHERE id = ?", [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete" });
+  }
+});
+
+/**
+ * POST /api/discounts/validate
+ * Validate a code for frontend check
+ */
+router.post("/discounts/validate", async (req, res) => {
+  try {
+    const { code } = req.body;
+    const db = getDatabase();
+    const [rows] = await db.execute("SELECT * FROM discount_codes WHERE code = ? AND is_active = 1", [code]);
+    
+    if (rows.length === 0) return res.status(404).json({ valid: false, message: "Code ungültig" });
+    
+    const discount = rows[0];
+    if (discount.expires_at && new Date(discount.expires_at) < new Date()) return res.status(400).json({ valid: false, message: "Code abgelaufen" });
+    if (discount.max_uses !== null && discount.used_count >= discount.max_uses) return res.status(400).json({ valid: false, message: "Code Limit erreicht" });
+
+    res.json({ valid: true, type: discount.type, value: discount.value });
+  } catch (error) {
+    res.status(500).json({ message: "Validation failed" });
   }
 });
 
