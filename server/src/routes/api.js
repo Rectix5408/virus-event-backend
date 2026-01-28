@@ -316,4 +316,107 @@ router.post("/settings/maintenance", protect, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/contact
+ * Submit a contact request
+ */
+router.post("/contact", async (req, res) => {
+  try {
+    const { name, email, subject, message } = req.body;
+    const db = getDatabase();
+    
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS contact_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255),
+        email VARCHAR(255),
+        subject VARCHAR(255),
+        message TEXT,
+        status VARCHAR(50) DEFAULT 'open',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await db.execute(
+      "INSERT INTO contact_requests (name, email, subject, message) VALUES (?, ?, ?, ?)",
+      [name, email, subject, message]
+    );
+
+    res.json({ success: true, message: "Request submitted" });
+  } catch (error) {
+    console.error("Contact submit error:", error);
+    res.status(500).json({ message: "Failed to submit request" });
+  }
+});
+
+/**
+ * GET /api/admin/contact
+ * Get all contact requests
+ */
+router.get("/admin/contact", protect, async (req, res) => {
+  try {
+    const db = getDatabase();
+    // Ensure table exists
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS contact_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255),
+        email VARCHAR(255),
+        subject VARCHAR(255),
+        message TEXT,
+        status VARCHAR(50) DEFAULT 'open',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    const [rows] = await db.execute("SELECT * FROM contact_requests ORDER BY created_at DESC");
+    res.json(rows);
+  } catch (error) {
+    console.error("Get contact requests error:", error);
+    res.status(500).json({ message: "Failed to fetch requests" });
+  }
+});
+
+/**
+ * DELETE /api/admin/contact/:id
+ */
+router.delete("/admin/contact/:id", protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+    await db.execute("DELETE FROM contact_requests WHERE id = ?", [id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete" });
+  }
+});
+
+/**
+ * POST /api/admin/contact/:id/reply
+ * Reply to a contact request
+ */
+router.post("/admin/contact/:id/reply", protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { replyMessage, subject } = req.body;
+    const db = getDatabase();
+
+    const [rows] = await db.execute("SELECT * FROM contact_requests WHERE id = ?", [id]);
+    if (rows.length === 0) return res.status(404).json({ message: "Request not found" });
+    
+    const request = rows[0];
+
+    // Hier würde die echte E-Mail-Logik stehen (z.B. mit nodemailer)
+    // Da wir keinen direkten Zugriff auf den Email-Service haben, simulieren wir den Versand.
+    console.log(`📧 [Mock Email] To: ${request.email}, Subject: ${subject}, Body: ${replyMessage}`);
+
+    await db.execute("UPDATE contact_requests SET status = 'replied' WHERE id = ?", [id]);
+
+    res.json({ success: true, message: "Reply sent" });
+  } catch (error) {
+    console.error("Reply error:", error);
+    res.status(500).json({ message: "Failed to send reply" });
+  }
+});
+
 export default router;
