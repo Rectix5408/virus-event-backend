@@ -47,6 +47,7 @@ export const createTables = async () => {
         image TEXT,
         description TEXT,
         ticketUrl VARCHAR(255),
+        eventSecret VARCHAR(255),
         detailedLineup JSON,
         ticketTiers JSON,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -191,7 +192,7 @@ export const createTables = async () => {
       )
     `);
 
-    // Guestlist Table
+        // Guestlist Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS guestlist (
         id CHAR(36) NOT NULL PRIMARY KEY,
@@ -200,6 +201,7 @@ export const createTables = async () => {
         category VARCHAR(50) NOT NULL,
         plusOne TINYINT(1) DEFAULT 0,
         status VARCHAR(20) DEFAULT 'pending',
+          checkedIn BOOLEAN DEFAULT FALSE,
         ticketId VARCHAR(255) DEFAULT NULL,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
