@@ -278,6 +278,18 @@ const runMigrations = async () => {
         console.log("✅ Schema migration successful: Added fields to newsletter_subscribers table.");
       }
 
+      // Prüfen ob 'qrCode' Spalte in 'guestlist' existiert
+      const [guestlistColumns] = await connection.execute("SHOW COLUMNS FROM guestlist LIKE 'qrCode'");
+      
+      if (guestlistColumns.length === 0) {
+        console.log("⚠️ Missing column 'qrCode' in 'guestlist'. Running migration...");
+        await connection.execute(`
+          ALTER TABLE guestlist
+          ADD COLUMN qrCode LONGTEXT AFTER status
+        `);
+        console.log("✅ Schema migration successful: Added qrCode to guestlist table.");
+      }
+
       console.log("✅ Database schema check complete.");
     } catch (err) {
       console.error("❌ Migration failed:", err.message);
