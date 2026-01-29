@@ -302,6 +302,22 @@ const runMigrations = async () => {
         console.log("✅ Schema migration successful: Added email to guestlist table.");
       }
 
+      // Prüfen ob 'users' Tabelle das neue Schema hat (Email Spalte)
+      // Falls nicht, müssen wir die Tabelle neu erstellen, da sich auch der Primärschlüssel-Typ geändert hat (INT -> VARCHAR)
+      const [userColumns] = await connection.execute("SHOW COLUMNS FROM users LIKE 'email'");
+      
+      if (userColumns.length === 0) {
+        console.log("⚠️ Detected old 'users' table schema. Recreating table for new Admin System...");
+        
+        // Tabellen droppen (Reihenfolge wichtig wegen Foreign Keys)
+        await connection.execute("DROP TABLE IF EXISTS sessions");
+        await connection.execute("DROP TABLE IF EXISTS users");
+        
+        // Tabellen neu erstellen (ruft createTables aus database.js auf)
+        await createTables();
+        console.log("✅ Users table recreated and seeded with default admin.");
+      }
+
       console.log("✅ Database schema check complete.");
     } catch (err) {
       console.error("❌ Migration failed:", err.message);

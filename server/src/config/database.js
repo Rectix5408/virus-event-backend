@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
 
 dotenv.config();
 
@@ -92,10 +93,13 @@ export const createTables = async () => {
     // Users Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(255) NOT NULL UNIQUE,
+        id VARCHAR(255) PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        permissions JSON
+        username VARCHAR(255),
+        role VARCHAR(50) DEFAULT 'user',
+        permissions JSON,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -103,7 +107,7 @@ export const createTables = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
+        user_id VARCHAR(255) NOT NULL,
         token VARCHAR(255) NOT NULL UNIQUE,
         expires_at DATETIME NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -269,6 +273,21 @@ export const createTables = async () => {
     if (adminRows[0].count == 0) {
       console.log("🌱 Seeding database with default admin...");
       await pool.query("INSERT INTO admins (username, password) VALUES (?, ?)", ['admin', 'virus-admin-123']);
+    }
+
+    // Seed Users (New Admin System) if not exists
+    const [userRows] = await pool.query("SELECT COUNT(*) as count FROM users");
+    if (userRows[0].count == 0) {
+      console.log("🌱 Seeding database with default super-admin user...");
+      const hashedPassword = await bcrypt.hash('virus-admin-123', 10);
+      const adminId = 'admin-' + Date.now();
+      // Admin hat Zugriff auf alle Module (permissions array mit allen IDs)
+      const allPermissions = JSON.stringify(["dashboard", "users", "tickets", "orders", "content", "scanner", "settings"]);
+      
+      await pool.query(
+        "INSERT INTO users (id, email, password, username, role, permissions) VALUES (?, ?, ?, ?, ?, ?)", 
+        [adminId, 'admin@virus.event', hashedPassword, 'Super Admin', 'admin', allPermissions]
+      );
     }
 
     // Seed Merch Products if not exists
