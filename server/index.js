@@ -40,7 +40,7 @@ const allowedOrigins = [
   "https://virus-event.de",
   "http://localhost:5173",
   "http://localhost:8080",
-  "http://10.27.204.2:8080",
+  "https://10.27.204.2:8080",
 ];
 
 // Dynamisch die konfigurierte Frontend-URL hinzufügen
