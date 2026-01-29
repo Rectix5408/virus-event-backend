@@ -1,113 +1,107 @@
 import express from 'express';
-import { getDatabase } from '../config/database.js';
-import { emitEvent } from '../services/socket.js';
+import { getDatabase } from "../config/database.js";
+import { emitEvent } from "../services/socket.js";
+import { invalidateCache } from "../middleware/cache.js";
 
 const router = express.Router();
 
-// Middleware (vereinfacht, hier sollte deine Auth-Middleware stehen)
-const isAdmin = (req, res, next) => next();
-
-// GET: Alle Tickets abrufen (mit Filter & Suche)
-router.get('/', isAdmin, async (req, res) => {
-    try {
-        const { eventId, search } = req.query;
-
-        console.log(`[AdminTickets] Fetching tickets. EventId: '${eventId}', Search: '${search}'`);
-        
-        const db = getDatabase();
-        
-        let query = `
-            SELECT t.*, e.title as eventName, e.dateISO as eventDate
-            FROM tickets t 
-            LEFT JOIN events e ON t.eventId = e.id
-            WHERE 1=1
-        `;
-        const params = [];
-
-        // Robusterer Check für eventId
-        if (eventId && eventId !== 'all' && eventId !== 'undefined' && eventId.trim() !== '') {
-            query += ' AND t.eventId = ?';
-            params.push(eventId.trim());
-        }
-
-        if (search) {
-            query += ' AND (t.email LIKE ? OR t.firstName LIKE ? OR t.lastName LIKE ? OR t.id LIKE ?)';
-            const searchParam = `%${search}%`;
-            params.push(searchParam, searchParam, searchParam, searchParam);
-        }
-
-        // Sortierung: Zuerst nach Event-Datum (Zukunft -> Vergangenheit), dann nach Ticket-Kaufdatum
-        query += ' ORDER BY e.dateISO DESC, t.createdAt DESC';
-
-        const [rows] = await db.query(query, params);
-        
-        res.json(rows);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Database error' });
-    }
+// GET /api/admin/tickets - Alle Tickets abrufen (nur verkaufte)
+router.get('/', async (req, res) => {
+  try {
+    const db = getDatabase();
+    const [tickets] = await db.execute('SELECT * FROM tickets ORDER BY createdAt DESC');
+    res.json(tickets);
+  } catch (error) {
+    console.error("Fehler beim Laden der Tickets:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Tickets" });
+  }
 });
 
-// PUT: Ticket bearbeiten
-router.put('/:id', isAdmin, async (req, res) => {
+// POST /api/admin/tickets/validate - Ticket ODER Gästeliste scannen
+router.post('/validate', async (req, res) => {
+  const { qrContent, eventId } = req.body;
+  
+  if (!qrContent) {
+    return res.status(400).json({ valid: false, message: "Kein QR-Code Inhalt" });
+  }
+
+  const db = getDatabase();
+
+  try {
+    // 1. Versuch: Suche in TICKETS Tabelle
+    // Wir suchen nach der Ticket ID im QR Content (der meist ein JSON String ist)
+    let ticketId = null;
+    let isGuest = false;
+
     try {
-        const { id } = req.params;
-        const { firstName, lastName, email, status, checkIn } = req.body;
-        const db = getDatabase();
-
-        await db.query(
-            'UPDATE tickets SET firstName = ?, lastName = ?, email = ?, status = ?, checkIn = ? WHERE id = ?',
-            [firstName, lastName, email, status, checkIn ? 1 : 0, id]
-        );
-
-        // Event senden damit alle Clients aktualisieren
-        emitEvent('ticket_update', { action: 'update', ticketId: id });
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Database error' });
+      const parsed = JSON.parse(qrContent);
+      ticketId = parsed.ticketId || parsed.id;
+      // Optional: Prüfen ob Event ID übereinstimmt, falls im QR Code vorhanden
+      if (eventId && parsed.eventId && parsed.eventId !== eventId) {
+         return res.status(400).json({ valid: false, message: "Ticket ist für ein anderes Event!" });
+      }
+    } catch (e) {
+      // Fallback: QR Content ist direkt die ID
+      ticketId = qrContent;
     }
-});
 
-// DELETE: Ticket löschen
-router.delete('/:id', isAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const db = getDatabase();
-        await db.query('DELETE FROM tickets WHERE id = ?', [id]);
-        
-        emitEvent('ticket_update', { action: 'delete', ticketId: id });
+    // Zuerst in Tickets suchen
+    const [tickets] = await db.execute('SELECT * FROM tickets WHERE id = ?', [ticketId]);
+    
+    if (tickets.length > 0) {
+      const ticket = tickets[0];
+      
+      if (ticket.checkIn) {
+        return res.status(400).json({ valid: false, message: `Bereits eingecheckt am ${new Date(ticket.checkInTime).toLocaleTimeString()}`, ticket });
+      }
 
-        res.json({ success: true });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Database error' });
+      // Check-In durchführen
+      await db.execute('UPDATE tickets SET checkIn = TRUE, checkInTime = NOW() WHERE id = ?', [ticketId]);
+      
+      // Realtime Update
+      emitEvent('ticket_checkin', { ticketId, eventId: ticket.eventId });
+      
+      return res.json({ valid: true, type: 'ticket', message: "Ticket gültig! Viel Spaß.", ticket: { ...ticket, checkIn: true } });
     }
-});
 
-// POST: Check-in Status umschalten
-router.post('/:id/checkin', isAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { checkIn } = req.body; // true/false
-        const db = getDatabase();
-        
-        // Wenn eingecheckt wird, Zeit setzen, sonst NULL
-        const checkInTime = checkIn ? new Date() : null;
-
-        await db.query(
-            'UPDATE tickets SET checkIn = ?, checkInTime = ? WHERE id = ?',
-            [checkIn ? 1 : 0, checkInTime, id]
-        );
-
-        emitEvent('ticket_update', { action: 'checkin', ticketId: id, status: checkIn });
-        
-        res.json({ success: true, checkInTime });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Database error' });
+    // 2. Versuch: Suche in GÄSTELISTE
+    // Gästelisten-IDs sind oft INTs, aber im QR Code als String/JSON
+    // Wir suchen in der guestlist Tabelle nach id (wenn numerisch) oder ticketId (wenn generiert)
+    
+    // Versuch über ticketId Spalte in guestlist (falls wir UUIDs nutzen)
+    let [guests] = await db.execute('SELECT * FROM guestlist WHERE ticketId = ?', [ticketId]);
+    
+    // Fallback: Versuch über ID (Primary Key)
+    if (guests.length === 0 && !isNaN(ticketId)) {
+       [guests] = await db.execute('SELECT * FROM guestlist WHERE id = ?', [ticketId]);
     }
+
+    if (guests.length > 0) {
+      const guest = guests[0];
+
+      if (eventId && guest.eventId !== eventId) {
+        return res.status(400).json({ valid: false, message: "Gästelisten-Platz ist für ein anderes Event!" });
+      }
+
+      if (guest.status === 'checked_in') {
+        return res.status(400).json({ valid: false, message: "Gast bereits eingecheckt!", guest });
+      }
+
+      // Check-In
+      await db.execute("UPDATE guestlist SET status = 'checked_in' WHERE id = ?", [guest.id]);
+      
+      // Realtime Update
+      emitEvent('guestlist_update', { eventId: guest.eventId, type: 'update', guestId: guest.id, status: 'checked_in' });
+
+      return res.json({ valid: true, type: 'guest', message: `Gästeliste: ${guest.name} (${guest.category})`, guest: { ...guest, status: 'checked_in' } });
+    }
+
+    return res.status(404).json({ valid: false, message: "Ticket oder Gast nicht gefunden." });
+
+  } catch (error) {
+    console.error("Scan Error:", error);
+    res.status(500).json({ error: "Serverfehler beim Scannen" });
+  }
 });
 
 export default router;

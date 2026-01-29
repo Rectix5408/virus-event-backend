@@ -132,6 +132,29 @@ export const checkOutGuest = async (guestId) => {
     return { success: true };
 };
 
+/**
+ * Aktualisiert die Daten eines Gastes.
+ */
+export const updateGuest = async (guestId, { name, email, category, plusOne }) => {
+  const db = getDatabase();
+  const connection = await db.getConnection();
+  try {
+    const [result] = await connection.execute(
+      `UPDATE guestlist SET name = ?, email = ?, category = ?, plusOne = ? WHERE id = ?`,
+      [name, email || null, category, plusOne, guestId]
+    );
+
+    const [guestRows] = await connection.execute("SELECT eventId FROM guestlist WHERE id = ?", [guestId]);
+    if (guestRows.length > 0) {
+      const eventId = guestRows[0].eventId;
+      await invalidateCache([`guestlist:${eventId}`]);
+      emitEvent('guestlist_update', { eventId, type: 'update', guestId });
+    }
+    return { success: result.affectedRows > 0 };
+  } finally {
+    connection.release();
+  }
+};
 
 /**
  * Generiert ein gültiges Ticket für einen Gästelisten-Eintrag.
@@ -152,7 +175,28 @@ export const generateGuestTicket = async ({ guestId, email }) => {
     const guest = guestRows[0];
 
     if (!guest) throw new Error("Gästelisten-Eintrag nicht gefunden.");
-    if (guest.ticketId) throw new Error("Für diesen Gast wurde bereits ein Ticket erstellt.");
+
+    // Fall 1: Ticket existiert bereits -> Erneut senden
+    if (guest.ticketId) {
+      const [ticketRows] = await connection.execute("SELECT * FROM tickets WHERE id = ?", [guest.ticketId]);
+      if (!ticketRows.length) throw new Error(`Zugehöriges Ticket ${guest.ticketId} nicht gefunden.`);
+      const ticket = ticketRows[0];
+      
+      const [eventRows] = await connection.execute("SELECT * FROM events WHERE id = ?", [guest.eventId]);
+      const event = eventRows[0];
+      if (!event) throw new Error(`Event nicht gefunden: ${guest.eventId}`);
+
+      const targetEmail = email || guest.email || ticket.email;
+      if (!targetEmail) throw new Error("Keine E-Mail-Adresse zum Senden vorhanden.");
+
+      const eventDetails = { name: event.title, date: event.date, time: event.time, location: event.location };
+      await sendTicketEmail({ ...ticket, email: targetEmail }, eventDetails);
+      
+      await connection.commit(); // Transaktion abschließen
+      console.log(`✓ E-Mail für Ticket ${ticket.id} erneut an ${targetEmail} gesendet.`);
+      return { success: true, ticketId: ticket.id, resent: true };
+    }
+    // Fall 2: Neues Ticket erstellen
 
     // 2. Event-Details holen
     const [eventRows] = await connection.execute(

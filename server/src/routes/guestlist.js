@@ -4,6 +4,7 @@ import {
   getGuestsForEvent, 
   deleteGuest, 
   checkInGuest, 
+  updateGuest,
   checkOutGuest,
   generateGuestTicket
 } from '../services/guestlist.js';
@@ -40,6 +41,17 @@ router.delete('/:guestId', async (req, res) => {
   } catch (error) {
     console.error('Error deleting guest:', error);
     res.status(500).json({ error: 'Failed to delete guest' });
+  }
+});
+
+// PUT /api/admin/guestlist/:guestId
+router.put('/:guestId', async (req, res) => {
+  try {
+    const result = await updateGuest(req.params.guestId, req.body);
+    res.json(result);
+  } catch (error) {
+    console.error('Error updating guest:', error);
+    res.status(500).json({ error: 'Failed to update guest' });
   }
 });
 
