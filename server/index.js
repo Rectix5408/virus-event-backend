@@ -278,29 +278,6 @@ const runMigrations = async () => {
         console.log("✅ Schema migration successful: Added fields to newsletter_subscribers table.");
       }
 
-      // Prüfen ob 'guestlist' Tabelle existiert
-      const [guestlistTable] = await connection.execute("SHOW TABLES LIKE 'guestlist'");
-      
-      if (guestlistTable.length === 0) {
-        console.log("⚠️ Table 'guestlist' missing. Creating...");
-        await connection.execute(`
-          CREATE TABLE IF NOT EXISTS guestlist (
-            id CHAR(36) NOT NULL PRIMARY KEY,
-            eventId VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-            name VARCHAR(255) NOT NULL,
-            category VARCHAR(50) NOT NULL,
-            plusOne TINYINT(1) DEFAULT 0,
-            status VARCHAR(20) DEFAULT 'pending',
-            ticketId VARCHAR(255) DEFAULT NULL,
-            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_event (eventId),
-            CONSTRAINT fk_guestlist_events FOREIGN KEY (eventId) REFERENCES events (id) ON DELETE CASCADE
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        `);
-        console.log("✅ Schema migration successful: Created guestlist table.");
-      }
-
       console.log("✅ Database schema check complete.");
     } catch (err) {
       console.error("❌ Migration failed:", err.message);

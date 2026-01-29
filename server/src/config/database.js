@@ -38,31 +38,31 @@ export const createTables = async () => {
     // Events Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS events (
-        id VARCHAR(255) PRIMARY KEY,
+        id VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         date VARCHAR(255) NOT NULL,
         dateISO DATE NOT NULL,
         time VARCHAR(255) NOT NULL,
         location VARCHAR(255) NOT NULL,
-        image TEXT NOT NULL,
+        image TEXT,
         description TEXT,
         ticketUrl VARCHAR(255),
         detailedLineup JSON,
         ticketTiers JSON,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     
     // Tickets Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tickets (
-        id VARCHAR(255) PRIMARY KEY,
+        id VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
         email VARCHAR(255) NOT NULL,
         firstName VARCHAR(100) NOT NULL,
         lastName VARCHAR(100) NOT NULL,
         tierId VARCHAR(50) NOT NULL,
         tierName VARCHAR(100) NOT NULL,
-        eventId VARCHAR(255) NOT NULL,
+        eventId VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
         eventTitle VARCHAR(255),
         quantity INT NOT NULL DEFAULT 1,
         qrCode LONGTEXT NOT NULL,
@@ -74,8 +74,9 @@ export const createTables = async () => {
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_email (email),
         INDEX idx_eventId (eventId),
-        INDEX idx_qrCode (qrCode(255))
-      )
+        INDEX idx_qrCode (qrCode(255)),
+        CONSTRAINT fk_tickets_events FOREIGN KEY (eventId) REFERENCES events (id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
     // Admins Table
