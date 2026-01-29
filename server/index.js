@@ -22,6 +22,7 @@ import { verifyEmailService } from "./src/services/email.js";
 import { initializeDatabase, createTables, getDatabase } from "./src/config/database.js";
 import { initSocket } from "./src/services/socket.js";
 import { rateLimit } from "./src/middleware/rateLimiter.js";
+import guestlistRoutes from './src/routes/guestlist.js';
 
 
 // Pfad Setup
@@ -70,6 +71,8 @@ app.options('*', cors(corsOptions));
 // Webhook routes BEFORE body parser (need raw body)
 app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
 app.use('/api/webhooks/paypal', express.raw({ type: 'application/json' }));
+
+app.use('/api/admin/guestlist', guestlistRoutes);
 
 // Body Parser
 app.use(bodyParser.json({ limit: '50mb' }));
