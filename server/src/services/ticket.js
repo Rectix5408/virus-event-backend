@@ -1,5 +1,6 @@
 import { getDatabase } from "../config/database.js";
 import { generateTicketId } from "../utils/helpers.js";
+import { emitEvent } from "./socket.js";
 
 /**
  * Save ticket to database
@@ -41,6 +42,83 @@ export const saveTicket = async (ticketData, dbConnection = null) => {
       connection.release();
     }
     throw error;
+  }
+};
+
+/**
+ * Validate Ticket or Guestlist Entry (Scan)
+ * Handles logic for checking tickets and guestlist entries
+ */
+export const validateTicketScan = async (qrContent, eventId) => {
+  if (!qrContent) {
+    return { valid: false, status: 400, message: "Kein QR-Code Inhalt" };
+  }
+
+  const db = getDatabase();
+  const connection = await db.getConnection();
+
+  try {
+    // 1. Versuch: Suche in TICKETS Tabelle
+    let ticketId = null;
+
+    try {
+      const parsed = JSON.parse(qrContent);
+      ticketId = parsed.ticketId || parsed.id;
+      if (eventId && parsed.eventId && parsed.eventId !== eventId) {
+         return { valid: false, status: 400, message: "Ticket ist für ein anderes Event!" };
+      }
+    } catch (e) {
+      ticketId = qrContent;
+    }
+
+    const [tickets] = await connection.execute('SELECT * FROM tickets WHERE id = ?', [ticketId]);
+    
+    if (tickets.length > 0) {
+      const ticket = tickets[0];
+      if (ticket.checkIn) {
+        return { 
+            valid: false, 
+            status: 400, 
+            message: `Bereits eingecheckt am ${new Date(ticket.checkInTime).toLocaleTimeString()}`, 
+            ticket 
+        };
+      }
+      
+      const checkInTime = new Date();
+      await connection.execute('UPDATE tickets SET checkIn = ?, checkInTime = ? WHERE id = ?', [true, checkInTime, ticketId]);
+      
+      emitEvent('ticket_checkin', { ticketId, eventId: ticket.eventId });
+      
+      return { 
+          valid: true, 
+          type: 'ticket', 
+          message: "Ticket gültig! Viel Spaß.", 
+          ticket: { ...ticket, checkIn: true, checkInTime } 
+      };
+    }
+
+    // 2. Versuch: Suche in GÄSTELISTE
+    let [guests] = await connection.execute('SELECT * FROM guestlist WHERE ticketId = ?', [ticketId]);
+    if (guests.length === 0 && !isNaN(ticketId)) {
+       [guests] = await connection.execute('SELECT * FROM guestlist WHERE id = ?', [ticketId]);
+    }
+
+    if (guests.length > 0) {
+      const guest = guests[0];
+      if (eventId && guest.eventId !== eventId) return { valid: false, status: 400, message: "Gästelisten-Platz ist für ein anderes Event!" };
+      if (guest.status === 'checked_in') return { valid: false, status: 400, message: "Gast bereits eingecheckt!", guest };
+
+      await connection.execute("UPDATE guestlist SET status = 'checked_in' WHERE id = ?", [guest.id]);
+      emitEvent('guestlist_update', { eventId: guest.eventId, type: 'update', guestId: guest.id, status: 'checked_in' });
+      return { valid: true, type: 'guest', message: `Gästeliste: ${guest.name} (${guest.category})`, guest: { ...guest, status: 'checked_in' } };
+    }
+
+    return { valid: false, status: 404, message: "Ticket oder Gast nicht gefunden." };
+  } catch (error) {
+    console.error("Scan Error in Service:", error);
+    throw error;
+  } finally {
+    connection.release();
   }
 };
 

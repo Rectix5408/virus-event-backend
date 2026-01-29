@@ -2,11 +2,12 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import { createCheckoutSession, constructWebhookEvent, handleStripeWebhook } from "../services/stripe.js";
 import { isValidEmail } from "../utils/helpers.js";
-import { updateCheckIn, getTicketById, getTicketsByEmail, getEventStats, findTicketByQRCode } from "../services/ticket.js";
+import { updateCheckIn, getTicketById, getTicketsByEmail, getEventStats, findTicketByQRCode, validateTicketScan } from "../services/ticket.js";
 import users from "./users.js";
 import { protect } from './auth.js';
 import { getDatabase } from "../config/database.js";
 import { emitEvent } from "../services/socket.js";
+import { invalidateCache } from "../middleware/cache.js";
 
 const router = express.Router();
 
@@ -171,6 +172,26 @@ router.post("/checkin", async (req, res) => {
 });
 
 /**
+ * POST /api/tickets/validate
+ * Advanced Check-in (Tickets & Guestlist) - Merged from adminTickets.js
+ */
+router.post('/tickets/validate', protect, async (req, res) => {
+  try {
+    const { qrContent, eventId } = req.body;
+    const result = await validateTicketScan(qrContent, eventId);
+    
+    if (!result.valid) {
+        return res.status(result.status || 400).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error("Scan Error:", error);
+    res.status(500).json({ error: "Serverfehler beim Scannen" });
+  }
+});
+
+/**
  * GET /api/tickets/:email
  * Get user's tickets
  */
@@ -253,6 +274,8 @@ router.delete("/tickets/:id", protect, async (req, res) => {
     const { id } = req.params;
     const db = getDatabase();
     await db.execute("DELETE FROM tickets WHERE id = ?", [id]);
+    invalidateCache(['tickets']);
+    emitEvent('ticket_deleted', { id });
     res.json({ success: true, message: "Ticket deleted" });
   } catch (error) {
     console.error("Delete ticket error:", error);
@@ -269,6 +292,7 @@ router.put("/tickets/:id/checkin", protect, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
     await updateCheckIn(id, status);
+    emitEvent('ticket_checkin', { ticketId: id, status });
     res.json({ success: true, message: "Check-in status updated" });
   } catch (error) {
     console.error("Check-in update error:", error);
