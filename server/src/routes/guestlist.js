@@ -4,7 +4,8 @@ import {
   getGuestsForEvent, 
   deleteGuest, 
   checkInGuest, 
-  generateGuestTicket 
+  checkOutGuest,
+  generateGuestTicket
 } from '../services/guestlist.js';
 
 const router = express.Router();
@@ -64,6 +65,17 @@ router.put('/:guestId/checkin', async (req, res) => {
   } catch (error) {
     console.error('Error checking in guest:', error);
     res.status(500).json({ error: 'Failed to check in guest' });
+  }
+});
+
+// PUT /api/admin/guestlist/:guestId/checkout
+router.put('/:guestId/checkout', async (req, res) => {
+  try {
+    await checkOutGuest(req.params.guestId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error checking out guest:', error);
+    res.status(500).json({ error: 'Failed to check out guest' });
   }
 });
 

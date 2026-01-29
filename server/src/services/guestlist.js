@@ -110,6 +110,28 @@ export const checkInGuest = async (guestId) => {
     return { success: true };
 };
 
+/**
+ * Checkt einen Gast aus (Status zurücksetzen).
+ */
+export const checkOutGuest = async (guestId) => {
+    const db = getDatabase();
+
+    // Event ID holen für Cache Invalidation
+    const [rows] = await db.execute("SELECT eventId FROM guestlist WHERE id = ?", [guestId]);
+    if (rows.length === 0) return { success: false };
+    const eventId = rows[0].eventId;
+
+    await db.execute("UPDATE guestlist SET status = 'pending' WHERE id = ?", [guestId]);
+
+    // LIVE UPDATE & CACHE
+    try {
+        await invalidateCache([`guestlist:${eventId}`]);
+        emitEvent('guestlist_update', { eventId, type: 'update', guestId, status: 'pending' });
+    } catch (e) { console.error("Realtime update failed", e); }
+
+    return { success: true };
+};
+
 
 /**
  * Generiert ein gültiges Ticket für einen Gästelisten-Eintrag.
