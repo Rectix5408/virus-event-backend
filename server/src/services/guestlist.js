@@ -20,6 +20,13 @@ export const addGuest = async ({ eventId, name, category, plusOne }) => {
     );
     // Rückgabe des neu erstellten Gastes zur sofortigen Anzeige im Frontend
     const [guestRows] = await connection.execute("SELECT * FROM guestlist WHERE id = ?", [result.insertId]);
+    
+    // LIVE UPDATE & CACHE
+    try {
+      await invalidateCache([`guestlist:${eventId}`]);
+      emitEvent('guestlist_update', { eventId, type: 'add', guest: guestRows[0] });
+    } catch (e) { console.error("Realtime update failed", e); }
+
     return guestRows[0];
   } finally {
     connection.release();
@@ -47,8 +54,20 @@ export const getGuestsForEvent = async (eventId) => {
  */
 export const deleteGuest = async (guestId) => {
     const db = getDatabase();
-    // Optional: Wenn ein Ticket verknüpft ist, sollte es auch ungültig gemacht werden.
+    
+    // Event ID holen für Cache Invalidation und Socket Room
+    const [rows] = await db.execute("SELECT eventId FROM guestlist WHERE id = ?", [guestId]);
+    if (rows.length === 0) return { success: false };
+    const eventId = rows[0].eventId;
+
     await db.execute("DELETE FROM guestlist WHERE id = ?", [guestId]);
+
+    // LIVE UPDATE & CACHE
+    try {
+        await invalidateCache([`guestlist:${eventId}`]);
+        emitEvent('guestlist_update', { eventId, type: 'delete', guestId });
+    } catch (e) { console.error("Realtime update failed", e); }
+
     return { success: true };
 };
 
@@ -57,7 +76,20 @@ export const deleteGuest = async (guestId) => {
  */
 export const checkInGuest = async (guestId) => {
     const db = getDatabase();
+
+    // Event ID holen für Cache Invalidation
+    const [rows] = await db.execute("SELECT eventId FROM guestlist WHERE id = ?", [guestId]);
+    if (rows.length === 0) return { success: false };
+    const eventId = rows[0].eventId;
+
     await db.execute("UPDATE guestlist SET status = 'checked_in' WHERE id = ?", [guestId]);
+
+    // LIVE UPDATE & CACHE
+    try {
+        await invalidateCache([`guestlist:${eventId}`]);
+        emitEvent('guestlist_update', { eventId, type: 'update', guestId, status: 'checked_in' });
+    } catch (e) { console.error("Realtime update failed", e); }
+
     return { success: true };
 };
 
@@ -142,6 +174,12 @@ export const generateGuestTicket = async ({ guestId, email }) => {
         console.error(`⚠ Ticket ${ticketId} erstellt, aber Email-Versand fehlgeschlagen:`, emailError.message);
       }
     }
+
+    // LIVE UPDATE & CACHE
+    try {
+        await invalidateCache([`guestlist:${guest.eventId}`, 'events:all', `events:detail:${guest.eventId}`]);
+        emitEvent('guestlist_update', { eventId: guest.eventId, type: 'update', guestId: guest.id, ticketId });
+    } catch (e) { console.error("Realtime update failed", e); }
 
     return { success: true, ticketId, qrCode: qrCodeImage };
 
