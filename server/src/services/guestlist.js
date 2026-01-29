@@ -8,15 +8,15 @@ import { invalidateCache } from "../middleware/cache.js";
 /**
  * Fügt einen Gast zur Gästeliste für ein bestimmtes Event hinzu.
  */
-export const addGuest = async ({ eventId, name, category, plusOne }) => {
+export const addGuest = async ({ eventId, name, email, category, plusOne }) => {
   const db = getDatabase();
   const connection = await db.getConnection();
   try {
     // Annahme: Eine Tabelle 'guestlist' existiert
     const [result] = await connection.execute(
-      `INSERT INTO guestlist (eventId, name, category, plusOne, status, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())`,
-      [eventId, name, category, plusOne || false]
+      `INSERT INTO guestlist (eventId, name, email, category, plusOne, status, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+      [eventId, name, email || null, category, plusOne || false]
     );
 
     const guestId = result.insertId;
@@ -33,6 +33,11 @@ export const addGuest = async ({ eventId, name, category, plusOne }) => {
     // Rückgabe des neu erstellten Gastes zur sofortigen Anzeige im Frontend
     const [guestRows] = await connection.execute("SELECT * FROM guestlist WHERE id = ?", [guestId]);
     
+    // Wenn E-Mail vorhanden, Ticket direkt generieren und senden
+    if (email) {
+      await generateGuestTicket({ guestId, email });
+    }
+
     // LIVE UPDATE & CACHE
     try {
       await invalidateCache([`guestlist:${eventId}`]);
@@ -51,7 +56,7 @@ export const addGuest = async ({ eventId, name, category, plusOne }) => {
 export const getGuestsForEvent = async (eventId) => {
   const db = getDatabase();
   const [rows] = await db.execute(
-    `SELECT g.id, g.name, g.category, g.plusOne, g.status, g.ticketId, g.qrCode 
+    `SELECT g.id, g.name, g.email, g.category, g.plusOne, g.status, g.ticketId, g.qrCode 
      FROM guestlist g
      LEFT JOIN tickets t ON g.ticketId = t.id
      WHERE g.eventId = ?
@@ -181,7 +186,6 @@ export const generateGuestTicket = async ({ guestId, email }) => {
       };
       try {
         await sendTicketEmail(ticketData, eventDetails);
-        console.log(`✓ Gästelisten-Ticket ${ticketId} an ${email} gesendet.`);
       } catch (emailError) {
         console.error(`⚠ Ticket ${ticketId} erstellt, aber Email-Versand fehlgeschlagen:`, emailError.message);
       }

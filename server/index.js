@@ -290,6 +290,18 @@ const runMigrations = async () => {
         console.log("✅ Schema migration successful: Added qrCode to guestlist table.");
       }
 
+      // Prüfen ob 'email' Spalte in 'guestlist' existiert
+      const [guestlistEmailColumn] = await connection.execute("SHOW COLUMNS FROM guestlist LIKE 'email'");
+      
+      if (guestlistEmailColumn.length === 0) {
+        console.log("⚠️ Missing column 'email' in 'guestlist'. Running migration...");
+        await connection.execute(`
+          ALTER TABLE guestlist
+          ADD COLUMN email VARCHAR(255) AFTER name
+        `);
+        console.log("✅ Schema migration successful: Added email to guestlist table.");
+      }
+
       console.log("✅ Database schema check complete.");
     } catch (err) {
       console.error("❌ Migration failed:", err.message);
