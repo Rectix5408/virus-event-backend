@@ -195,12 +195,13 @@ export const createTables = async () => {
         // Guestlist Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS guestlist (
-        id CHAR(36) NOT NULL PRIMARY KEY,
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         eventId VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
         name VARCHAR(255) NOT NULL,
         category VARCHAR(50) NOT NULL,
         plusOne TINYINT(1) DEFAULT 0,
         status VARCHAR(20) DEFAULT 'pending',
+        qrCode LONGTEXT,
           checkedIn BOOLEAN DEFAULT FALSE,
         ticketId VARCHAR(255) DEFAULT NULL,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,

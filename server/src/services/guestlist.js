@@ -14,12 +14,24 @@ export const addGuest = async ({ eventId, name, category, plusOne }) => {
   try {
     // Annahme: Eine Tabelle 'guestlist' existiert
     const [result] = await connection.execute(
-      `INSERT INTO guestlist (id, eventId, name, category, plusOne, status, createdAt, updatedAt)
-       VALUES (UUID(), ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+      `INSERT INTO guestlist (eventId, name, category, plusOne, status, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())`,
       [eventId, name, category, plusOne || false]
     );
+
+    const guestId = result.insertId;
+
+    // QR Code generieren
+    const qrContent = { type: 'guest', id: guestId, eventId, name };
+    const qrCodeData = JSON.stringify(qrContent);
+    const qrCodeImage = await QRCode.toDataURL(qrCodeData, {
+      errorCorrectionLevel: "H", type: "image/png", quality: 0.95, margin: 1, width: 400,
+    });
+
+    await connection.execute("UPDATE guestlist SET qrCode = ? WHERE id = ?", [qrCodeImage, guestId]);
+
     // Rückgabe des neu erstellten Gastes zur sofortigen Anzeige im Frontend
-    const [guestRows] = await connection.execute("SELECT * FROM guestlist WHERE id = ?", [result.insertId]);
+    const [guestRows] = await connection.execute("SELECT * FROM guestlist WHERE id = ?", [guestId]);
     
     // LIVE UPDATE & CACHE
     try {
@@ -39,7 +51,7 @@ export const addGuest = async ({ eventId, name, category, plusOne }) => {
 export const getGuestsForEvent = async (eventId) => {
   const db = getDatabase();
   const [rows] = await db.execute(
-    `SELECT g.id, g.name, g.category, g.plusOne, g.status, g.ticketId, t.qrCode 
+    `SELECT g.id, g.name, g.category, g.plusOne, g.status, g.ticketId, g.qrCode 
      FROM guestlist g
      LEFT JOIN tickets t ON g.ticketId = t.id
      WHERE g.eventId = ?
