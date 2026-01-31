@@ -38,10 +38,10 @@ const PORT = process.env.PORT || 3001;
 const allowedOrigins = [
   "https://www.virus-event.de",
   "https://virus-event.de",
-  "http://localhost:5173",
-  "http://localhost:8080",
-  "https://localhost:8080",
-  "https://10.27.204.2:8080",
+  "http://localhost",          // Wichtig für Android App
+  "https://localhost",         // Manchmal für Android/iOS
+  "capacitor://localhost",     // Wichtig für iOS App
+  "http://localhost:5173" 
 ];
 
 // Dynamisch die konfigurierte Frontend-URL hinzufügen
@@ -53,7 +53,12 @@ if (process.env.FRONTEND_URL) {
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
+
+    // Regex erlaubt http://localhost, https://localhost mit beliebigen Ports sowie Capacitor
+    const isLocalhost = /^https?:\/\/localhost(:[0-9]+)?$/.test(origin);
+    const isCapacitor = origin === 'capacitor://localhost';
+
+    if (isLocalhost || isCapacitor || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     console.warn(`⚠️ CORS Blocked Origin: ${origin}`);
