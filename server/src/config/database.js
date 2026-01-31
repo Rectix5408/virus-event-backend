@@ -282,7 +282,7 @@ export const createTables = async () => {
       const hashedPassword = await bcrypt.hash('virus-admin-123', 10);
       const adminId = 'admin-' + Date.now();
       // Admin hat Zugriff auf alle Module (permissions array mit allen IDs)
-      const allPermissions = JSON.stringify(["dashboard", "users", "tickets", "orders", "content", "scanner", "settings"]);
+      const allPermissions = JSON.stringify(["stats", "events", "tickets", "orders", "merch", "discounts", "scanner", "users", "newsletter", "guestlist", "contact", "maintenance"]);
       
       await pool.query(
         "INSERT INTO users (id, email, password, username, role, permissions) VALUES (?, ?, ?, ?, ?, ?)", 
