@@ -204,6 +204,14 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
   const connection = await db.getConnection();
 
   try {
+    // FIX: Doppelte Verarbeitung verhindern!
+    // Da wir Stripe Checkout nutzen, wird 'checkout.session.completed' gefeuert.
+    // 'payment_intent.succeeded' feuert AUCH, was zu Race-Conditions führt (doppelte Tickets/Emails).
+    if (metadata && (metadata.type === "ticket" || metadata.type === "merch")) {
+      console.log(`ℹ️ Skipping payment_intent.succeeded for ${metadata.type} (handled via checkout.session.completed)`);
+      return;
+    }
+
     await connection.beginTransaction();
 
     // Typ prüfen (Ticket vs Merch)
