@@ -1,23 +1,26 @@
 import nodemailer from 'nodemailer';
 
 // Konfiguration der Email-Accounts
-const ACCOUNTS = {
-  default: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
-  },
-  newsletter: {
-    user: process.env.EMAIL_NEWSLETTER_USER,
-    pass: process.env.EMAIL_NEWSLETTER_PASSWORD
-  },
-  orders: {
-    user: process.env.EMAIL_ORDERS_USER,
-    pass: process.env.EMAIL_ORDERS_PASSWORD
-  }
+const getAccounts = () => {
+  return {
+    default: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    },
+    newsletter: {
+      user: process.env.EMAIL_NEWSLETTER_USER,
+      pass: process.env.EMAIL_NEWSLETTER_PASSWORD
+    },
+    orders: {
+      user: process.env.EMAIL_ORDERS_USER,
+      pass: process.env.EMAIL_ORDERS_PASSWORD
+    }
+  };
 };
 
 const createTransporter = (accountName = 'default') => {
-  const account = ACCOUNTS[accountName] || ACCOUNTS.default;
+  const accounts = getAccounts();
+  const account = accounts[accountName] || accounts.default;
   return nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: process.env.EMAIL_PORT,
@@ -35,7 +38,8 @@ const createTransporter = (accountName = 'default') => {
 
 export const sendEmail = async ({ to, subject, html, text, headers, from, attachments, replyTo, accountName = 'default' }) => {
   const transport = createTransporter(accountName);
-  const account = ACCOUNTS[accountName] || ACCOUNTS.default;
+  const accounts = getAccounts();
+  const account = accounts[accountName] || accounts.default;
   
   // Fallback Absender definieren (falls .env EMAIL_FROM leer ist, nutze EMAIL_USER)
   const defaultFrom = `"${process.env.EMAIL_FROM_NAME || 'VIRUS Event'}" <${account.user}>`;
@@ -72,7 +76,8 @@ export const sendTicketEmail = async (ticketData, event) => {
   
   // WICHTIG: Wir nutzen den authentifizierten User als Absender (für Zustellbarkeit),
   // aber setzen Reply-To auf die Bestell-Adresse.
-  const senderEmail = ACCOUNTS.orders.user;
+  const accounts = getAccounts();
+  const senderEmail = accounts.orders.user;
   const from = `"VIRUS Bestellungen" <${senderEmail}>`;
   const replyTo = "bestellung@virus-event.de";
 
@@ -144,7 +149,8 @@ export const sendOrderConfirmationEmail = async (order) => {
   const to = order.email;
   const subject = `Bestellbestätigung #${order.orderId}`;
   
-  const senderEmail = ACCOUNTS.orders.user;
+  const accounts = getAccounts();
+  const senderEmail = accounts.orders.user;
   const from = `"VIRUS Bestellungen" <${senderEmail}>`;
   const replyTo = "bestellung@virus-event.de";
   
@@ -168,7 +174,8 @@ export const sendOrderConfirmationEmail = async (order) => {
  * Sendet Kontakt-Email (für Support-Antworten oder Benachrichtigungen)
  */
 export const sendContactEmail = async ({ to, subject, text, html }) => {
-  const senderEmail = ACCOUNTS.default.user;
+  const accounts = getAccounts();
+  const senderEmail = accounts.default.user;
   const from = `"VIRUS Kontakt" <${senderEmail}>`;
   const replyTo = "kontakt@virus-event.de";
   return sendEmail({ to, subject, text, html, from, replyTo });
@@ -178,7 +185,8 @@ export const sendContactEmail = async ({ to, subject, text, html }) => {
  * Sendet Newsletter-Email
  */
 export const sendNewsletterEmail = async ({ to, subject, text, html }) => {
-  const senderEmail = ACCOUNTS.newsletter.user;
+  const accounts = getAccounts();
+  const senderEmail = accounts.newsletter.user;
   const from = `"VIRUS Newsletter" <${senderEmail}>`;
   const replyTo = "newsletter@virus-event.de";
   return sendEmail({ to, subject, text, html, from, replyTo, accountName: 'newsletter' });

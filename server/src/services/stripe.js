@@ -599,6 +599,14 @@ export const constructWebhookEvent = (body, signature, webhookSecret) => {
     return event;
   } catch (error) {
     console.error("❌ Webhook-Signatur-Verifizierung fehlgeschlagen:", error.message);
+
+    if (error.message.includes("No signatures found matching")) {
+      console.error("💡 HINWEIS: Dies liegt meistens an einem falschen STRIPE_WEBHOOK_SECRET.");
+      console.error("   - Lokal (Stripe CLI): Nutze das Secret, das 'stripe listen' anzeigt (startet mit 'whsec_').");
+      console.error("   - Produktion: Nutze das Secret aus dem Stripe Dashboard (Entwickler > Webhooks).");
+      console.error(`   - Aktuell genutztes Secret (Start): ${webhookSecret ? webhookSecret.substring(0, 10) + '...' : 'NICHT GESETZT'}`);
+    }
+
     throw error;
   }
 };
