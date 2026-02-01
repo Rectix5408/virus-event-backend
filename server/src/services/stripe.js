@@ -312,54 +312,71 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
     throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${currentStock} verfügbar.`);
   }
 
-  // QR-Code generieren
-  // Inhalt des QR-Codes für den Einlass-Scanner (JSON Format)
-  const qrContent = {
-    ticketId: ticketId,
-    eventId: eventId,
-    email: email
-  };
-  const qrCodeData = JSON.stringify(qrContent);
+  // SCHLEIFE: Für jedes gekaufte Ticket einen eigenen Eintrag erstellen
+  console.log(`[Ticket] Generating ${qty} individual tickets...`);
+  
+  const generatedTickets = []; // Array zum Sammeln aller Tickets
 
-  const qrCodeImage = await QRCode.toDataURL(qrCodeData, {
-    errorCorrectionLevel: "H",
-    type: "image/png",
-    quality: 0.95,
-    margin: 1,
-    width: 400,
-  });
+  for (let i = 0; i < qty; i++) {
+    // Für das erste Ticket nutzen wir die ID aus den Metadaten (damit wir sie zuordnen können),
+    // für alle weiteren generieren wir eine neue ID.
+    const currentTicketId = (i === 0) ? ticketId : generateTicketId();
+    
+    // QR-Code generieren (Jedes Ticket hat seine eigene ID im QR-Code)
+    const qrContent = {
+      ticketId: currentTicketId,
+      eventId: eventId,
+      email: email,
+      index: i + 1, // Info: Ticket 1 von 5
+      total: qty
+    };
+    const qrCodeData = JSON.stringify(qrContent);
 
-  // Ticket in Datenbank speichern
-  try {
-    await connection.execute(
-      `INSERT INTO tickets (id, email, firstName, lastName, address, zipCode, city, mobileNumber, tierId, tierName, eventId, eventTitle, quantity, qrCode, paymentIntentId, status, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
-      [
-        ticketId,
-        email,
-        firstName,
-        lastName,
-        address,
-        zipCode,
-        city,
-        mobileNumber,
-        tierId,
-        selectedTier.name,
-        eventId,
-        event.title,
-        qty,
-        qrCodeImage,
-        paymentId
-      ]
-    );
-  } catch (err) {
-    // Wenn der Fehler "Duplicate entry" (Code 1062) ist, war ein anderer Prozess schneller.
-    // Das ist kein echter Fehler, sondern ein erfolgreiches "bereits erledigt".
-    if (err.code === 'ER_DUP_ENTRY') {
-      console.log(`✓ Race-Condition abgefangen: Ticket ${ticketId} wurde gerade parallel erstellt.`);
-      return; // Abbrechen, damit Stock nicht doppelt reduziert wird und keine doppelte Email rausgeht
+    const qrCodeImage = await QRCode.toDataURL(qrCodeData, {
+      errorCorrectionLevel: "H",
+      type: "image/png",
+      quality: 0.95,
+      margin: 1,
+      width: 400,
+    });
+
+    // Ticket in Datenbank speichern (Quantity ist hier immer 1 pro Zeile)
+    try {
+      await connection.execute(
+        `INSERT INTO tickets (id, email, firstName, lastName, address, zipCode, city, mobileNumber, tierId, tierName, eventId, eventTitle, quantity, qrCode, paymentIntentId, status, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', NOW())`,
+        [
+          currentTicketId,
+          email,
+          firstName,
+          lastName,
+          address,
+          zipCode,
+          city,
+          mobileNumber,
+          tierId,
+          selectedTier.name,
+          eventId,
+          event.title,
+          1, // WICHTIG: Hier steht jetzt 1, da es ein einzelnes Ticket ist
+          qrCodeImage,
+          paymentId
+        ]
+      );
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        console.log(`✓ Ticket ${currentTicketId} existiert bereits (Skipping).`);
+        continue; 
+      }
+      throw err;
     }
-    throw err; // Andere Fehler weiterwerfen
+
+    // Ticket zur Liste hinzufügen (für die Sammel-Email)
+    generatedTickets.push({
+      id: currentTicketId,
+      qrCode: qrCodeImage,
+      tierName: selectedTier.name
+    });
   }
 
   // Ticket abziehen (Stock reduzieren)
@@ -394,16 +411,9 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
     console.log(`📝 [Events] Stock updated for event: ${eventId}`);
   } catch (e) { console.error("Realtime update failed", e); }
 
-  // Email mit Ticket versenden
-  const eventDetails = {
-    name: event.title,
-    date: event.date,
-    time: event.time,
-    location: event.location
-  };
-
-  const ticketData = {
-    id: ticketId,
+  // SAMMEL-EMAIL VERSENDEN
+  // Wir senden jetzt EINE Email mit ALLEN Tickets als Anhang
+  const emailData = {
     email,
     firstName,
     lastName,
@@ -413,17 +423,23 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
     mobileNumber,
     tierName: selectedTier.name,
     quantity: qty,
-    qrCode: qrCodeImage,
+    tickets: generatedTickets, // Das Array mit allen QR-Codes
     eventId
   };
 
   try {
-    await sendTicketEmail(ticketData, eventDetails);
-    console.log(`✓ Ticket ${ticketId} erfolgreich erstellt und Email versendet`);
+    await sendTicketEmail(emailData, {
+      name: event.title,
+      date: event.date,
+      time: event.time,
+      location: event.location
+    });
+    console.log(`✓ Bulk email sent for ${qty} tickets.`);
   } catch (emailError) {
-    console.error(`⚠ Ticket ${ticketId} erstellt, aber Email-Versand fehlgeschlagen:`, emailError.message);
-    // Fehler nicht weiterwerfen, damit Ticket in DB gespeichert bleibt
+    console.error(`⚠ Bulk email failed:`, emailError.message);
   }
+
+  console.log(`✓ All ${qty} tickets processed successfully.`);
 };
 
 /**
