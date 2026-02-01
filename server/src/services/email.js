@@ -14,7 +14,8 @@ const createTransporter = () => {
         pass: process.env.EMAIL_PASSWORD,
       },
       tls: {
-        ciphers: 'SSLv3'
+        ciphers: 'SSLv3',
+        rejectUnauthorized: false // WICHTIG: Hilft bei Zertifikatsproblemen
       }
     });
   }
@@ -23,9 +24,13 @@ const createTransporter = () => {
 
 export const sendEmail = async ({ to, subject, html, text, headers, from, attachments }) => {
   const transport = createTransporter();
+  
+  // Fallback Absender definieren (falls .env EMAIL_FROM leer ist, nutze EMAIL_USER)
+  const defaultFrom = `"${process.env.EMAIL_FROM_NAME || 'VIRUS Event'}" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`;
+
   try {
     const info = await transport.sendMail({
-      from: from || `"${process.env.EMAIL_FROM_NAME || 'VIRUS Event'}" <${process.env.EMAIL_FROM}>`,
+      from: from || defaultFrom,
       to,
       subject,
       html,
@@ -36,7 +41,29 @@ export const sendEmail = async ({ to, subject, html, text, headers, from, attach
     console.log(`📧 Email sent to ${to} (ID: ${info.messageId})`);
     return info;
   } catch (error) {
-    console.error(`❌ FAILED to send email to ${to}:`, error.message);
+    console.error(`❌ FAILED to send email to ${to} with sender ${from || defaultFrom}:`, error.message);
+    
+    // RETRY LOGIK: Wenn der benutzerdefinierte Absender abgelehnt wurde, versuche es mit dem Standard-Absender
+    if (from && from !== defaultFrom) {
+      console.log(`⚠️ Retrying email to ${to} with default sender (${defaultFrom})...`);
+      try {
+        const infoRetry = await transport.sendMail({
+          from: defaultFrom,
+          to,
+          subject,
+          html,
+          text,
+          headers,
+          attachments
+        });
+        console.log(`📧 Retry successful! Email sent to ${to} (ID: ${infoRetry.messageId})`);
+        return infoRetry;
+      } catch (retryError) {
+        console.error(`❌ Retry also failed:`, retryError.message);
+        throw retryError;
+      }
+    }
+    
     throw error;
   }
 };
