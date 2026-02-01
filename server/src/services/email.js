@@ -1,36 +1,49 @@
 import nodemailer from 'nodemailer';
 
-// Transporter Singleton (wird beim ersten Aufruf erstellt)
-let transporter = null;
-
-const createTransporter = () => {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: process.env.EMAIL_PORT,
-      secure: false, // true für 465, false für andere Ports
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-      tls: {
-        ciphers: 'SSLv3',
-        rejectUnauthorized: false // WICHTIG: Hilft bei Zertifikatsproblemen
-      }
-    });
+// Konfiguration der Email-Accounts
+const ACCOUNTS = {
+  default: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD
+  },
+  newsletter: {
+    user: process.env.EMAIL_NEWSLETTER_USER,
+    pass: process.env.EMAIL_NEWSLETTER_PASSWORD
+  },
+  orders: {
+    user: process.env.EMAIL_ORDERS_USER,
+    pass: process.env.EMAIL_ORDERS_PASSWORD
   }
-  return transporter;
 };
 
-export const sendEmail = async ({ to, subject, html, text, headers, from, attachments }) => {
-  const transport = createTransporter();
+const createTransporter = (accountName = 'default') => {
+  const account = ACCOUNTS[accountName] || ACCOUNTS.default;
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: process.env.EMAIL_PORT,
+    secure: false,
+    auth: {
+      user: account.user,
+      pass: account.pass,
+    },
+    tls: {
+      ciphers: 'SSLv3',
+      rejectUnauthorized: false
+    }
+  });
+};
+
+export const sendEmail = async ({ to, subject, html, text, headers, from, attachments, replyTo, accountName = 'default' }) => {
+  const transport = createTransporter(accountName);
+  const account = ACCOUNTS[accountName] || ACCOUNTS.default;
   
   // Fallback Absender definieren (falls .env EMAIL_FROM leer ist, nutze EMAIL_USER)
-  const defaultFrom = `"${process.env.EMAIL_FROM_NAME || 'VIRUS Event'}" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`;
+  const defaultFrom = `"${process.env.EMAIL_FROM_NAME || 'VIRUS Event'}" <${account.user}>`;
 
   try {
     const info = await transport.sendMail({
       from: from || defaultFrom,
+      replyTo: replyTo,
       to,
       subject,
       html,
@@ -38,32 +51,10 @@ export const sendEmail = async ({ to, subject, html, text, headers, from, attach
       headers, // Für List-Unsubscribe
       attachments
     });
-    console.log(`📧 Email sent to ${to} (ID: ${info.messageId})`);
+    console.log(`📧 Email sent to ${to} (ID: ${info.messageId}) via ${accountName}`);
     return info;
   } catch (error) {
-    console.error(`❌ FAILED to send email to ${to} with sender ${from || defaultFrom}:`, error.message);
-    
-    // RETRY LOGIK: Wenn der benutzerdefinierte Absender abgelehnt wurde, versuche es mit dem Standard-Absender
-    if (from && from !== defaultFrom) {
-      console.log(`⚠️ Retrying email to ${to} with default sender (${defaultFrom})...`);
-      try {
-        const infoRetry = await transport.sendMail({
-          from: defaultFrom,
-          to,
-          subject,
-          html,
-          text,
-          headers,
-          attachments
-        });
-        console.log(`📧 Retry successful! Email sent to ${to} (ID: ${infoRetry.messageId})`);
-        return infoRetry;
-      } catch (retryError) {
-        console.error(`❌ Retry also failed:`, retryError.message);
-        throw retryError;
-      }
-    }
-    
+    console.error(`❌ FAILED to send email to ${to} via ${accountName}:`, error.message);
     throw error;
   }
 };
@@ -79,8 +70,11 @@ export const sendTicketEmail = async (ticketData, event) => {
   const eventName = event.title || event.name || "Event";
   const subject = `Deine Tickets für ${eventName}`;
   
-  // WICHTIG: Absender für Bestellungen
-  const from = `"VIRUS Bestellungen" <bestellung@virus-event.de>`;
+  // WICHTIG: Wir nutzen den authentifizierten User als Absender (für Zustellbarkeit),
+  // aber setzen Reply-To auf die Bestell-Adresse.
+  const senderEmail = ACCOUNTS.orders.user;
+  const from = `"VIRUS Bestellungen" <${senderEmail}>`;
+  const replyTo = "bestellung@virus-event.de";
 
   // Prüfen ob Sammelbestellung (Array) oder Einzelticket
   const tickets = ticketData.tickets || [ticketData];
@@ -140,7 +134,7 @@ export const sendTicketEmail = async (ticketData, event) => {
 
   const text = `Hallo ${ticketData.firstName},\n\nHier sind deine ${tickets.length} Tickets für ${eventName}.\nDatum: ${event.date}\nOrt: ${event.location}\n\nBitte nutze die HTML-Ansicht oder die Anhänge, um deine QR-Codes zu sehen.`;
 
-  return sendEmail({ to, subject, html, text, from, attachments });
+  return sendEmail({ to, subject, html, text, from, attachments, replyTo, accountName: 'orders' });
 };
 
 /**
@@ -149,8 +143,10 @@ export const sendTicketEmail = async (ticketData, event) => {
 export const sendOrderConfirmationEmail = async (order) => {
   const to = order.email;
   const subject = `Bestellbestätigung #${order.orderId}`;
-  // WICHTIG: Absender für Bestellungen
-  const from = `"VIRUS Bestellungen" <bestellung@virus-event.de>`;
+  
+  const senderEmail = ACCOUNTS.orders.user;
+  const from = `"VIRUS Bestellungen" <${senderEmail}>`;
+  const replyTo = "bestellung@virus-event.de";
   
   const html = `
     <div style="background-color: #000000; color: #ffffff; font-family: Arial, sans-serif; padding: 20px;">
@@ -165,22 +161,34 @@ export const sendOrderConfirmationEmail = async (order) => {
   
   const text = `Bestellung #${order.orderId} bestätigt. Summe: ${(order.totalAmount / 100).toFixed(2)} €`;
 
-  return sendEmail({ to, subject, html, text, from });
+  return sendEmail({ to, subject, html, text, from, replyTo, accountName: 'orders' });
 };
 
 /**
  * Sendet Kontakt-Email (für Support-Antworten oder Benachrichtigungen)
  */
 export const sendContactEmail = async ({ to, subject, text, html }) => {
-  const from = `"VIRUS Kontakt" <kontakt@virus-event.de>`;
-  return sendEmail({ to, subject, text, html, from });
+  const senderEmail = ACCOUNTS.default.user;
+  const from = `"VIRUS Kontakt" <${senderEmail}>`;
+  const replyTo = "kontakt@virus-event.de";
+  return sendEmail({ to, subject, text, html, from, replyTo });
+};
+
+/**
+ * Sendet Newsletter-Email
+ */
+export const sendNewsletterEmail = async ({ to, subject, text, html }) => {
+  const senderEmail = ACCOUNTS.newsletter.user;
+  const from = `"VIRUS Newsletter" <${senderEmail}>`;
+  const replyTo = "newsletter@virus-event.de";
+  return sendEmail({ to, subject, text, html, from, replyTo, accountName: 'newsletter' });
 };
 
 /**
  * Verifiziert die Verbindung zum Mailserver beim Start
  */
 export const verifyEmailService = async () => {
-  const transport = createTransporter();
+  const transport = createTransporter('default');
   try {
     await transport.verify();
     console.log("✅ Email service ready");
