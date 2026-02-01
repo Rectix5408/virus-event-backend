@@ -50,6 +50,8 @@ export const createCheckoutSession = async (payload) => {
 
     // Verfügbarkeit prüfen: Nur 'amountTickets' wird als Wahrheitsquelle verwendet.
     const currentStock = selectedTier.amountTickets ?? 0;
+    console.log(`[Checkout] Checking availability for Tier ${tierId}: Requested ${quantity}, Current Stock in DB: ${currentStock}`);
+
     if (quantity > currentStock) {
       throw new Error(`Nicht genügend Tickets verfügbar. Nur noch ${currentStock} verfügbar.`);
     }
