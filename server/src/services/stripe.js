@@ -19,11 +19,17 @@ const stripe = new Stripe(stripeKey || 'sk_test_dummy_key_to_prevent_crash', {
  * Erstellt eine Stripe Checkout Session (OHNE Ticket zu erstellen)
  */
 export const createCheckoutSession = async (payload) => {
-  const { tierId, quantity, email, firstName, lastName, address, zipCode, city, mobileNumber, eventId, successUrl, cancelUrl } = payload;
+  const { tierId, quantity: rawQuantity, email, firstName, lastName, address, zipCode, city, mobileNumber, eventId, successUrl, cancelUrl } = payload;
   const db = getDatabase();
   const connection = await db.getConnection();
 
   try {
+    // Menge sicherstellen
+    const quantity = parseInt(rawQuantity);
+    if (isNaN(quantity) || quantity <= 0) {
+      throw new Error(`Ungültige Menge: ${rawQuantity}`);
+    }
+
     // Event validieren (Kein Locking nötig hier, da wir nur lesen)
     const [eventRows] = await connection.execute(
       "SELECT * FROM events WHERE id = ?", 
@@ -255,6 +261,7 @@ const handleCheckoutCompleted = async (session) => {
  */
 export const createTicketAfterPayment = async (metadata, paymentId, amountTotal, connection) => {
   const { ticketId, eventId, tierId, quantity, firstName, lastName, email, address, zipCode, city, mobileNumber } = metadata;
+  const qty = parseInt(quantity);
 
   // Prüfen ob Ticket bereits existiert (Duplikat-Schutz)
   const [existing] = await connection.execute(
@@ -297,8 +304,10 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   }
 
   // Finale Verfügbarkeitsprüfung (Stock prüfen)
-  const currentStock = selectedTier.amountTickets ?? 0;
-  if (parseInt(quantity) > currentStock) {
+  const currentStock = Number(selectedTier.amountTickets ?? 0);
+  console.log(`[Ticket] Processing purchase: Event ${eventId}, Tier ${tierId}, Qty ${qty}, Stock before: ${currentStock}`);
+
+  if (qty > currentStock) {
     console.error(`🚨 CRITICAL: Overselling detected for Event ${eventId}, Tier ${tierId}. Payment ${paymentId} was successful but stock is empty.`);
     throw new Error(`Tickets nicht mehr verfügbar. Nur noch ${currentStock} verfügbar.`);
   }
@@ -338,7 +347,7 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
         selectedTier.name,
         eventId,
         event.title,
-        parseInt(quantity),
+        qty,
         qrCodeImage,
         paymentId
       ]
@@ -354,7 +363,8 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   }
 
   // Ticket abziehen (Stock reduzieren)
-  selectedTier.amountTickets = Math.max(0, currentStock - parseInt(quantity));
+  selectedTier.amountTickets = Math.max(0, currentStock - qty);
+  console.log(`[Ticket] Stock updated: ${currentStock} -> ${selectedTier.amountTickets}`);
 
   // Alte Felder entfernen, um Datenbank sauber zu halten
   delete selectedTier.availableQuantity;
@@ -401,7 +411,7 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
     city,
     mobileNumber,
     tierName: selectedTier.name,
-    quantity: parseInt(quantity),
+    quantity: qty,
     qrCode: qrCodeImage,
     eventId
   };
