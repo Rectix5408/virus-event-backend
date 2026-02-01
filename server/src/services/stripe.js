@@ -363,8 +363,9 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
   }
 
   // Ticket abziehen (Stock reduzieren)
-  selectedTier.amountTickets = Math.max(0, currentStock - qty);
-  console.log(`[Ticket] Stock updated: ${currentStock} -> ${selectedTier.amountTickets}`);
+  const newStock = Math.max(0, currentStock - qty);
+  selectedTier.amountTickets = newStock;
+  console.log(`[Ticket] Stock updated: ${currentStock} -> ${newStock} (Deducted: ${qty})`);
 
   // Alte Felder entfernen, um Datenbank sauber zu halten
   delete selectedTier.availableQuantity;
