@@ -302,6 +302,18 @@ export const createTicketAfterPayment = async (metadata, paymentId, amountTotal,
     throw new Error(`Event nicht gefunden: ${eventId}`);
   }
 
+  // RACE CONDITION FIX:
+  // Nachdem wir den Lock auf das Event haben (was bedeutet, dass vorherige Transaktionen durch sind),
+  // prüfen wir erneut, ob das Ticket für diese PaymentID bereits existiert.
+  const [existingAfterLock] = await connection.execute(
+    "SELECT id FROM tickets WHERE paymentIntentId = ?",
+    [paymentId]
+  );
+  if (existingAfterLock.length > 0) {
+    console.log(`✓ Race-Condition verhindert: Ticket für Payment ${paymentId} wurde bereits von einem parallelen Prozess erstellt.`);
+    return;
+  }
+
   // Tiers parsen
   let ticketTiers = event.ticketTiers;
   if (typeof ticketTiers === 'string') {
